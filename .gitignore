@@ -3,3 +3,5 @@ dist
 .env
 config.json
 .hue-tokens.json
+.dev.vars
+.wrangler

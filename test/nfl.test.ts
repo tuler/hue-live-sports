@@ -3,7 +3,7 @@ import { hexToXy } from "../src/color.ts";
 import { parseConfig } from "../src/config.ts";
 import { followedGames, parseScoreboard } from "../src/espn.ts";
 import { findNflTeam, NFL_TEAMS, requireNflTeam } from "../src/nfl.ts";
-import { teamColors } from "../src/runner.ts";
+import { teamColors } from "../src/effects.ts";
 import { scoreboard } from "./fixture.ts";
 
 describe("NFL teams", () => {

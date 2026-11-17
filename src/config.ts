@@ -1,4 +1,3 @@
-import { existsSync, readFileSync } from "node:fs";
 import { resolveLeague } from "./espn.ts";
 import { EFFECT_KEYS } from "./events.ts";
 import type { Signal } from "./hue.ts";
@@ -13,7 +12,8 @@ export interface Effect {
   colors?: string[];
 }
 
-export interface Config {
+/** One viewer's choices: shared by the local config file and a Worker user. */
+export interface Settings {
   /** Alias ("nfl", "epl") or ESPN path ("soccer/eng.1"). */
   league: string;
   /**
@@ -28,17 +28,21 @@ export interface Config {
   teams: string[];
   /** Name of the Hue room or zone to flash. */
   group: string;
+  /** Hold effects back this long, to line up with a delayed TV stream. */
+  delaySeconds: number;
+  /** "signal": bridge-run effect. "pulse": manual flashing with state restore. */
+  effectMode: "signal" | "pulse";
+  effects: Record<string, Effect>;
+}
+
+/** The local service: settings plus where its scores come from. */
+export interface Config extends Settings {
   /** Poll ESPN's scoreboard. On by default; turn off to rely on webhooks alone. */
   poll: boolean;
   /** How often to poll while a game is live. */
   pollSeconds: number;
   /** Receive pushed score updates over HTTP, alongside or instead of polling. */
   webhook?: WebhookConfig;
-  /** Hold effects back this long, to line up with a delayed TV stream. */
-  delaySeconds: number;
-  /** "signal": bridge-run effect. "pulse": manual flashing with state restore. */
-  effectMode: "signal" | "pulse";
-  effects: Record<string, Effect>;
 }
 
 export interface WebhookConfig {
@@ -73,29 +77,40 @@ export const DEFAULT_EFFECTS: Record<string, Effect> = {
   draw: off,
 };
 
-export const DEFAULT_CONFIG_PATH = "config.json";
+const fields = (raw: unknown): Record<string, unknown> => {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new Error("Config must be a JSON object");
+  return raw as Record<string, unknown>;
+};
 
-export function loadConfig(path = DEFAULT_CONFIG_PATH): Config {
-  if (!existsSync(path)) {
-    throw new Error(`Config file "${path}" not found. Copy config.example.json to ${path} and edit it.`);
+const seconds = (c: Record<string, unknown>, key: string, fallback: number, min: number): number => {
+  const v = c[key] ?? fallback;
+  if (typeof v !== "number" || !Number.isFinite(v) || v < min) {
+    throw new Error(`Config "${key}" must be a number >= ${min}`);
   }
-  return parseConfig(JSON.parse(readFileSync(path, "utf8")));
-}
+  return v;
+};
 
 export function parseConfig(raw: unknown): Config {
-  if (typeof raw !== "object" || raw === null) throw new Error("Config must be a JSON object");
-  const c = raw as Record<string, unknown>;
+  const c = fields(raw);
+  const poll = c.poll ?? true;
+  if (typeof poll !== "boolean") throw new Error('Config "poll" must be true or false');
+  const webhook = parseWebhook(c.webhook);
+  if (!poll && !webhook) throw new Error('Config has no score source: enable "poll" or "webhook"');
+  return {
+    ...parseSettings(c),
+    poll,
+    webhook,
+    // ESPN refreshes no faster than every few seconds; polling harder gains nothing.
+    pollSeconds: seconds(c, "pollSeconds", 10, 5),
+  };
+}
+
+export function parseSettings(raw: unknown): Settings {
+  const c = fields(raw);
   const text = (key: string): string => {
     const v = c[key];
     if (typeof v !== "string" || v.trim() === "") throw new Error(`Config "${key}" must be a non-empty string`);
     return v.trim();
-  };
-  const seconds = (key: string, fallback: number, min: number): number => {
-    const v = c[key] ?? fallback;
-    if (typeof v !== "number" || !Number.isFinite(v) || v < min) {
-      throw new Error(`Config "${key}" must be a number >= ${min}`);
-    }
-    return v;
   };
   const effectMode = c.effectMode ?? "signal";
   if (effectMode !== "signal" && effectMode !== "pulse") {
@@ -127,23 +142,7 @@ export function parseConfig(raw: unknown): Config {
   const nfl = resolveLeague(league) === NFL_LEAGUE;
   const teams = [...new Set((listed as string[]).map((t) => (nfl ? requireNflTeam(t).abbr : t.trim())))];
 
-  const poll = c.poll ?? true;
-  if (typeof poll !== "boolean") throw new Error('Config "poll" must be true or false');
-  const webhook = parseWebhook(c.webhook);
-  if (!poll && !webhook) throw new Error('Config has no score source: enable "poll" or "webhook"');
-
-  return {
-    league,
-    teams,
-    poll,
-    webhook,
-    group: text("group"),
-    // ESPN refreshes no faster than every few seconds; polling harder gains nothing.
-    pollSeconds: seconds("pollSeconds", 10, 5),
-    delaySeconds: seconds("delaySeconds", 0, 0),
-    effectMode,
-    effects,
-  };
+  return { league, teams, group: text("group"), delaySeconds: seconds(c, "delaySeconds", 0, 0), effectMode, effects };
 }
 
 function parseWebhook(raw: unknown): WebhookConfig | undefined {
@@ -163,7 +162,7 @@ function parseWebhook(raw: unknown): WebhookConfig | undefined {
   return { host, port, path, adapter };
 }
 
-export function effectFor(config: Config, keys: string[]): Effect | undefined {
+export function effectFor(config: Pick<Settings, "effects">, keys: string[]): Effect | undefined {
   for (const key of keys) {
     const effect = config.effects[key];
     if (effect) return effect.enabled ? effect : undefined;

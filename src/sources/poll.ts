@@ -2,6 +2,9 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { fetchScoreboard, type GameSnapshot } from "../espn.ts";
 import type { SportsEvent } from "../events.ts";
 import type { Tracker } from "../tracker.ts";
+import { nextPollSeconds } from "./feed.ts";
+
+export { nextPollSeconds };
 
 export const POLL_SOURCE = "poll";
 
@@ -14,14 +17,6 @@ export interface PollOptions {
   log: (message: string) => void;
   /** Supplies the scoreboard; exists so tests can replay one. */
   fetchBoard?: (league: string) => Promise<GameSnapshot[]>;
-}
-
-/** Seconds until the next poll: fast while any game is live, slow otherwise. */
-export function nextPollSeconds(games: Iterable<GameSnapshot>, liveSeconds: number): number {
-  const states = new Set([...games].map((g) => g.state));
-  if (states.has("in")) return liveSeconds;
-  if (states.has("pre")) return 60;
-  return 300;
 }
 
 /** Feeds the tracker from the scoreboard until aborted. */

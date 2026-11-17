@@ -12,5 +12,6 @@
     "skipLibCheck": true,
     "types": ["bun"]
   },
-  "include": ["src", "test"]
+  "include": ["src", "test"],
+  "exclude": ["src/worker"]
 }

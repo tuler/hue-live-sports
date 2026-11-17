@@ -1,49 +1,14 @@
 import { setTimeout as sleep } from "node:timers/promises";
-import { lampColors, toLamp } from "./color.ts";
-import { effectFor, type Config, type Effect } from "./config.ts";
-import { resolveLeague, type GameSnapshot, type TeamSide } from "./espn.ts";
+import type { Config } from "./config.ts";
+import { play, type Lights } from "./effects.ts";
+import { resolveLeague, type GameSnapshot } from "./espn.ts";
 import { describe, forTeams, type SportsEvent } from "./events.ts";
-import type { HueBridge, LightGroup } from "./hue.ts";
-import type { XY } from "./color.ts";
-import { findNflTeam, NFL_LEAGUE } from "./nfl.ts";
+import { isLate, planEffects } from "./plan.ts";
 import { runPoller } from "./sources/poll.ts";
-import { ADAPTERS, serveWebhook } from "./sources/webhook.ts";
+import { ADAPTERS, createWebhookHandler, type WebhookOptions } from "./sources/webhook.ts";
 import { Tracker } from "./tracker.ts";
 
-export interface Lights {
-  bridge: HueBridge;
-  group: LightGroup;
-}
-
 const log = (msg: string) => console.log(`${new Date().toLocaleTimeString()}  ${msg}`);
-
-/**
- * A team's lamp colours: the built-in table for NFL teams, else whatever the
- * scoreboard reports, else white.
- */
-export function teamColors(
-  league: string,
-  side: Pick<TeamSide, "abbreviation" | "color" | "alternateColor"> | undefined,
-): XY[] {
-  const nfl = league === NFL_LEAGUE && side ? findNflTeam(side.abbreviation) : undefined;
-  return nfl ? toLamp(nfl.colors) : lampColors(side?.color, side?.alternateColor);
-}
-
-/** Colours for an effect: its own override, else those of `team`. */
-export function colorsFor(team: TeamSide, effect: Effect, league: string): XY[] {
-  return effect.colors?.length ? toLamp(effect.colors) : teamColors(league, team);
-}
-
-export async function play(lights: Lights, config: Config, effect: Effect, colors: XY[]): Promise<void> {
-  if (config.effectMode === "pulse") await lights.bridge.pulse(lights.group, effect.seconds, colors);
-  else await lights.bridge.signal(lights.group, effect.signal, effect.seconds, colors);
-}
-
-/**
- * An effect that would start this late is dropped: with many games live the
- * lights can fall behind, and a flash for a minute-old play means nothing.
- */
-export const MAX_LAG_SECONDS = 45;
 
 export interface Dispatcher {
   /** Log events and queue their effects. Returns at once. */
@@ -53,33 +18,43 @@ export interface Dispatcher {
 }
 
 /** Turns events into light effects, one at a time. Without `lights` it only logs. */
-export function createDispatcher(config: Config, lights: Lights | undefined, league: string): Dispatcher {
+export function createDispatcher(config: Config, lights: Lights | undefined): Dispatcher {
   // Effects run one at a time so a touchdown and its extra point don't collide.
   let queue: Promise<void> = Promise.resolve();
   return {
     handle(events) {
-      for (const event of events) {
-        const mine = forTeams(event, config.teams);
-        if (!mine) continue;
-        log(describe(event));
-        const effect = effectFor(config, mine.keys);
-        if (!effect || !lights) continue;
-        const colors = colorsFor(mine.team, effect, league);
-        // Due at a fixed time, so the TV delay is not added once per queued effect.
-        const dueAt = Date.now() + config.delaySeconds * 1000;
+      const now = Date.now();
+      for (const event of events) if (forTeams(event, config.teams)) log(describe(event));
+      if (!lights) return;
+      for (const planned of planEffects(events, config, now)) {
         queue = queue
           .then(async () => {
-            await sleep(Math.max(0, dueAt - Date.now()));
-            if (Date.now() - dueAt > MAX_LAG_SECONDS * 1000) {
-              log(`Skipped a late effect: ${describe(event)}`);
+            await sleep(Math.max(0, planned.dueAt - Date.now()));
+            if (isLate(planned.dueAt, Date.now())) {
+              log(`Skipped a late effect: ${planned.label}`);
               return;
             }
-            await play(lights, config, effect, colors);
+            await play(lights, config.effectMode, planned.effect, planned.colors);
           })
           .catch((err: unknown) => console.error("Effect failed:", err));
       }
     },
     idle: () => queue,
+  };
+}
+
+export type { Lights } from "./effects.ts";
+
+interface WebhookServer {
+  url: string;
+  stop(): Promise<void>;
+}
+
+function serveWebhook(tracker: Tracker, options: WebhookOptions & { host: string; port: number }): WebhookServer {
+  const server = Bun.serve({ hostname: options.host, port: options.port, fetch: createWebhookHandler(tracker, options) });
+  return {
+    url: `http://${server.hostname}:${server.port}${options.path}`,
+    stop: () => server.stop(true),
   };
 }
 
@@ -104,7 +79,7 @@ export async function run(
 ): Promise<void> {
   const league = resolveLeague(config.league);
   const tracker = new Tracker();
-  const dispatcher = createDispatcher(config, lights, league);
+  const dispatcher = createDispatcher(config, lights);
   const who = config.teams.length ? config.teams.join(", ") : "every team";
   log(`Watching ${who} in ${league}${lights ? ` on "${lights.group.name}"` : " (dry run)"}`);
 

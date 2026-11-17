@@ -178,3 +178,23 @@ describe("codeFromRedirect", () => {
     expect(() => codeFromRedirect("  ", "s1")).toThrow(/Nothing/);
   });
 });
+
+describe("default fetch", () => {
+  it("calls the global fetch with no `this`, as Workers require", async () => {
+    const original = globalThis.fetch;
+    let receiver: unknown = "not called";
+    globalThis.fetch = function (this: unknown) {
+      receiver = this;
+      return Promise.resolve(Response.json({ access_token: "a", refresh_token: "r", expires_in: 60 }));
+    } as unknown as typeof fetch;
+    try {
+      const auth = new HueRemoteAuth({ clientId: "c", clientSecret: "s", store: memoryStore() });
+      await auth.exchangeCode("code");
+      expect(receiver === undefined || receiver === globalThis).toBe(true);
+      await new HueBridge(remoteTransport(auth, { appKey: "k" })).groups().catch(() => {});
+      expect(receiver === undefined || receiver === globalThis).toBe(true);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+});

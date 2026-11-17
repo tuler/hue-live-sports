@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "hue-live-sports",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  "observability": { "enabled": true },
+  "workers_dev": true,
+  "routes": [{ "pattern": "hue-live-sports.tuler.dev", "custom_domain": true }],
+  "preview_urls": false,
+  "durable_objects": {
+    "bindings": [
+      { "name": "GAMES", "class_name": "Games" },
+      { "name": "FEEDER", "class_name": "Feeder" },
+      { "name": "USER", "class_name": "User" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Games", "Feeder", "User"] }]
+  // Secrets (`wrangler secret put`, or .dev.vars locally):
+  // WEBHOOK_SECRET, HUE_CLIENT_ID, HUE_CLIENT_SECRET, ADMIN_TOKEN
+}

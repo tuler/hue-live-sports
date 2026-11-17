@@ -115,10 +115,29 @@ Because the colours are built in, `test` works for any NFL team whether or not i
 - **The Remote API adds a round trip through Hue's cloud** and has rate limits that are not yet measured.
 - **The bridge certificate is not verified by default**, since it is issued by Signify's private CA for the bridge id rather than its IP. To verify it, set `HUE_CA_FILE` to the Hue root CA and `HUE_BRIDGE_ID` to the bridge id.
 
+## Cloudflare Worker (in progress)
+
+[`src/worker`](src/worker) runs the same pipeline as a hosted service, with no bridge on the local network:
+
+- **Games** (a Durable Object per league) holds the shared tracker behind the webhook receiver at `POST /webhook/<league>`. Game state is the same for everyone.
+- **Feeder** (one per league) polls ESPN on an alarm, every 10 s while a game is live, and posts the board to that receiver, signed, like any other score source.
+- **User** (one per person) keeps that person's settings and Hue Remote API tokens. It filters events to their teams, holds each effect for their TV delay, and plays it from an alarm.
+
+Run it locally:
+
+```sh
+# .dev.vars (gitignored): WEBHOOK_SECRET, HUE_CLIENT_ID, HUE_CLIENT_SECRET, ADMIN_TOKEN
+bun run worker:dev
+curl -X PUT localhost:8787/users/me -H "authorization: Bearer $ADMIN_TOKEN" \
+  -d '{"league":"nfl","teams":["LAC"],"group":"Living Room","delaySeconds":0}'
+```
+
+The reply has a one-time `authLink` that signs the user in to Hue. For it to work, the Hue app's callback URL must be `<worker>/auth/callback`. Admin routes (`Authorization: Bearer $ADMIN_TOKEN`): `GET /users/<id>`, `POST /users/<id>/test` with `{"effect":"touchdown","team":"LAC"}`, `POST /users/<id>/auth-link`, and `GET /leagues/<league>`.
+
 ## Development
 
 ```sh
-bun run typecheck
+bun run typecheck   # the CLI with Bun's types, then the Worker with Cloudflare's
 bun test
 ```
 

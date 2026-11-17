@@ -24,7 +24,7 @@ function receiver() {
   });
   const post = async (payload: unknown, init: { headers?: Record<string, string>; raw?: string } = {}) => {
     const body = init.raw ?? JSON.stringify(payload);
-    const res = await handle(new Request(URL_, { method: "POST", body, headers: init.headers ?? signGeneric(body, SECRET) }));
+    const res = await handle(new Request(URL_, { method: "POST", body, headers: init.headers ?? (await signGeneric(body, SECRET)) }));
     return { status: res.status, json: (await res.json()) as Record<string, unknown> };
   };
   return { tracker, handle, post, keys: () => seen.map((e) => eventKeys(e)[0]) };
@@ -53,8 +53,8 @@ describe("webhook handler", () => {
   it("rejects unsigned, mis-signed, tampered and stale requests", async () => {
     const { post, keys } = receiver();
     const body = JSON.stringify(update(7, 0));
-    const stale = signGeneric(body, SECRET, Date.now() - (MAX_CLOCK_SKEW_SECONDS + 5) * 1000);
-    for (const headers of [{}, signGeneric(body, "wrong"), signGeneric(`${body} `, SECRET), stale, { "x-timestamp": "now", "x-signature": "sha256=00" }]) {
+    const stale = await signGeneric(body, SECRET, Date.now() - (MAX_CLOCK_SKEW_SECONDS + 5) * 1000);
+    for (const headers of [{}, await signGeneric(body, "wrong"), await signGeneric(`${body} `, SECRET), stale, { "x-timestamp": "now", "x-signature": "sha256=00" }]) {
       expect((await post(undefined, { raw: body, headers })).status).toBe(401);
     }
     expect(keys()).toEqual([]);
@@ -105,7 +105,7 @@ async function service(overrides: object, during: (url: string, calls: unknown[]
 
 const send = async (url: string, payload: unknown) => {
   const body = JSON.stringify(payload);
-  const res = await fetch(url, { method: "POST", body, headers: signGeneric(body, SECRET) });
+  const res = await fetch(url, { method: "POST", body, headers: await signGeneric(body, SECRET) });
   expect(res.status).toBe(200);
 };
 

@@ -15,6 +15,16 @@ import type { HueTransport } from "./hue.ts";
 
 export const REMOTE_API = "https://api.meethue.com";
 
+/**
+ * The global `fetch`, looked up at call time. Workers throw "Illegal
+ * invocation" when `fetch` runs with any other `this`, as it would if kept
+ * on an object and called as a method.
+ */
+const globalFetch: FetchLike = (input, init) => fetch(input, init);
+
+/** The part of `fetch` used here; tests pass a fake. */
+export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
+
 /** Refresh this long before the access token runs out. */
 const REFRESH_MARGIN_MS = 5 * 60 * 1000;
 
@@ -35,20 +45,20 @@ export interface RemoteAuthOptions {
   clientSecret: string;
   store: TokenStore;
   baseUrl?: string;
-  fetchImpl?: typeof fetch;
+  fetchImpl?: FetchLike;
   now?: () => number;
 }
 
 export class HueRemoteAuth {
   private readonly baseUrl: string;
-  private readonly fetchImpl: typeof fetch;
+  private readonly fetchImpl: FetchLike;
   private readonly now: () => number;
   /** A refresh in flight: refresh tokens are single use, so callers share one. */
   private refreshing?: Promise<RemoteTokens>;
 
   constructor(private readonly options: RemoteAuthOptions) {
     this.baseUrl = options.baseUrl ?? REMOTE_API;
-    this.fetchImpl = options.fetchImpl ?? fetch;
+    this.fetchImpl = options.fetchImpl ?? globalFetch;
     this.now = options.now ?? Date.now;
   }
 
@@ -117,12 +127,12 @@ export interface RemoteTransportOptions {
   /** The bridge's app key. Not needed to press the link button or create one. */
   appKey?: string;
   baseUrl?: string;
-  fetchImpl?: typeof fetch;
+  fetchImpl?: FetchLike;
 }
 
 export function remoteTransport(auth: HueRemoteAuth, options: RemoteTransportOptions = {}): HueTransport {
   const baseUrl = options.baseUrl ?? REMOTE_API;
-  const fetchImpl = options.fetchImpl ?? fetch;
+  const fetchImpl = options.fetchImpl ?? globalFetch;
   const attempt = async (method: string, path: string, body: string | undefined, token: string) =>
     fetchImpl(`${baseUrl}/route${path}`, {
       method,

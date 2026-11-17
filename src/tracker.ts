@@ -19,6 +19,16 @@ const teamKey = (t: TeamSide): string => t.abbreviation.toLowerCase();
  */
 export const gameKey = (g: GameSnapshot): string => g.teams.map(teamKey).sort().join("-");
 
+/** A tracker's memory as plain JSON, for a Durable Object to store between requests. */
+export interface TrackerState {
+  games: {
+    game: GameSnapshot;
+    scoredBy: [string, { source: string; at: number }][];
+    sources: [string, number][];
+    seenAt: number;
+  }[];
+}
+
 interface Tracked {
   game: GameSnapshot;
   /** Which source set each team's current score, and when. */
@@ -45,6 +55,30 @@ export class Tracker {
   private readonly tracked = new Map<string, Tracked>();
 
   constructor(private readonly now: () => number = Date.now) {}
+
+  static restore(state: TrackerState | undefined, now?: () => number): Tracker {
+    const tracker = new Tracker(now);
+    for (const t of state?.games ?? []) {
+      tracker.tracked.set(t.game.id, {
+        game: t.game,
+        scoredBy: new Map(t.scoredBy),
+        sources: new Map(t.sources),
+        seenAt: t.seenAt,
+      });
+    }
+    return tracker;
+  }
+
+  save(): TrackerState {
+    return {
+      games: [...this.tracked.values()].map((t) => ({
+        game: t.game,
+        scoredBy: [...t.scoredBy],
+        sources: [...t.sources],
+        seenAt: t.seenAt,
+      })),
+    };
+  }
 
   games(): GameSnapshot[] {
     return [...this.tracked.values()].map((t) => t.game);

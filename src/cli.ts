@@ -1,13 +1,15 @@
 #!/usr/bin/env bun
 import { parseArgs } from "node:util";
 import { toLamp, type XY } from "./color.ts";
-import { DEFAULT_CONFIG_PATH, effectFor, loadConfig } from "./config.ts";
+import { effectFor } from "./config.ts";
+import { DEFAULT_CONFIG_PATH, loadConfig } from "./config-file.ts";
 import { fetchScoreboard, followedGames, isTeam, LEAGUES, resolveLeague } from "./espn.ts";
 import { discoverBridges, HueBridge } from "./hue.ts";
 import { localTransport } from "./hue-local.ts";
 import { codeFromRedirect, HueRemoteAuth, remoteTransport } from "./hue-remote.ts";
 import { fullName, NFL_LEAGUE, NFL_TEAMS, requireNflTeam } from "./nfl.ts";
-import { play, run, teamColors } from "./runner.ts";
+import { play, teamColors } from "./effects.ts";
+import { run } from "./runner.ts";
 import { signGeneric } from "./sources/webhook.ts";
 import { DEFAULT_TOKEN_FILE, fileTokenStore } from "./token-file.ts";
 
@@ -176,7 +178,7 @@ async function main(): Promise<void> {
       const hue = bridge(flags, true);
       const group = await hue.findGroup(config.group);
       console.log(`Playing "${arg}" on ${group.name} for ${effect.seconds}s in xy ${shown}`);
-      await play({ bridge: hue, group }, config, effect, colors);
+      await play({ bridge: hue, group }, config.effectMode, effect, colors);
       return;
     }
     case "emit": {
@@ -198,7 +200,7 @@ async function main(): Promise<void> {
       });
       const res = await fetch(url, {
         method: "POST",
-        headers: { "content-type": "application/json", ...signGeneric(body, secret) },
+        headers: { "content-type": "application/json", ...(await signGeneric(body, secret)) },
         body,
       });
       console.log(`${res.status} ${await res.text()}`);
