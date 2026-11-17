@@ -8,7 +8,7 @@
   "delaySeconds": 0,
   "effectMode": "signal",
   "effects": {
-    "any.touchdown": { "seconds": 6, "signal": "alternating" },
-    "any.extra_point": { "enabled": false }
+    "touchdown": { "seconds": 6, "signal": "alternating" },
+    "extra_point": { "enabled": false }
   }
 }

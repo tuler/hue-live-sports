@@ -29,21 +29,22 @@ describe("config", () => {
   it("applies defaults", () => {
     const c = parseConfig(base);
     expect(c).toMatchObject({ teams: [], pollSeconds: 10, delaySeconds: 0, effectMode: "signal" });
-    expect(effectFor(c, ["any.touchdown", "any.score"])).toMatchObject({ seconds: 6 });
-    expect(effectFor(c, ["any.extra_point", "any.score"])).toBeUndefined();
-    expect(effectFor(c, ["any.game_start"])).toBeUndefined();
-    expect(effectFor(c, ["us.touchdown", "us.score"])).toMatchObject({ seconds: 10, signal: "alternating" });
-  });
-  it("falls back to the side's generic effect", () => {
-    expect(effectFor(parseConfig(base), ["them.touchdown", "them.score"])).toMatchObject({ seconds: 3 });
+    expect(effectFor(c, ["touchdown", "score"])).toMatchObject({ seconds: 10, signal: "alternating" });
+    expect(effectFor(c, ["extra_point", "score"])).toBeUndefined();
+    expect(effectFor(c, ["game_start"])).toBeUndefined();
+    expect(effectFor(c, ["win"])).toMatchObject({ seconds: 10, signal: "alternating" });
   });
   it("lets a specific disabled effect win over the fallback", () => {
-    expect(effectFor(parseConfig(base), ["us.basket", "us.score"])).toBeUndefined();
+    expect(effectFor(parseConfig(base), ["basket", "score"])).toBeUndefined();
   });
   it("merges overrides", () => {
-    const c = parseConfig({ ...base, effects: { loss: { seconds: 4 }, "us.goal": { enabled: false } } });
-    expect(effectFor(c, ["loss"])).toMatchObject({ enabled: true, seconds: 4 });
-    expect(effectFor(c, ["us.goal", "us.score"])).toBeUndefined();
+    const c = parseConfig({ ...base, effects: { draw: { seconds: 4 }, goal: { enabled: false } } });
+    expect(effectFor(c, ["draw"])).toMatchObject({ enabled: true, seconds: 4 });
+    expect(effectFor(c, ["goal", "score"])).toBeUndefined();
+  });
+  it("rejects unknown effects, pointing old side-prefixed keys at their new name", () => {
+    expect(() => parseConfig({ ...base, effects: { "any.touchdown": {} } })).toThrow(/use "touchdown"/);
+    expect(() => parseConfig({ ...base, effects: { loss: {} } })).toThrow(/Unknown effect "loss"\. Known/);
   });
   it("rejects invalid values", () => {
     expect(() => parseConfig({ ...base, teams: "NYG" })).toThrow(/teams/);

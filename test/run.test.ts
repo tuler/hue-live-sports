@@ -45,9 +45,9 @@ it("flashes for scores in every live game, in the scoring team's colours", async
   ]);
   expect(calls).toEqual([
     // DAL touchdown: blue and white, alternating.
-    { signal: "alternating", seconds: 6, colors: [hexToXy("003594"), hexToXy("FFFFFF")] },
+    { signal: "alternating", seconds: 10, colors: [hexToXy("003594"), hexToXy("FFFFFF")] },
     // The extra point is off by default; KC's field goal is red and gold.
-    { signal: "on_off_color", seconds: 3, colors: [hexToXy("E31837"), hexToXy("FFB81C")] },
+    { signal: "on_off_color", seconds: 5, colors: [hexToXy("E31837"), hexToXy("FFB81C")] },
   ]);
 });
 
@@ -60,7 +60,7 @@ it("keeps its baseline through a failed poll", async () => {
   expect(calls).toHaveLength(1);
 });
 
-it("only flashes for followed teams when some are configured", async () => {
+it("only flashes for tracked teams when some are configured", async () => {
   const calls = await replay(
     [
       [live("1", ["NYG", 0], ["DAL", 0]), live("2", ["KC", 3], ["BUF", 0])],

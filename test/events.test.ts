@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { parseScoreboard } from "../src/espn.ts";
-import { classifyScore, detectEvents, eventKeys } from "../src/events.ts";
+import { classifyScore, detectEvents, eventKeys, forTeams } from "../src/events.ts";
 import { scoreboard } from "./fixture.ts";
 
 const snap = (state: "pre" | "in" | "post", home: number, away: number, league = "football/nfl") =>
@@ -19,17 +19,22 @@ describe("classifyScore", () => {
   });
 });
 
-describe("detectEvents with no followed team", () => {
+describe("detectEvents", () => {
   it("stays quiet on the first poll", () => {
     expect(detectEvents(undefined, snap("in", 21, 14))).toEqual([]);
   });
 
-  it("reports either team's score as 'any'", () => {
+  it("reports each team's score by kind", () => {
     const [home] = detectEvents(snap("in", 0, 0), snap("in", 6, 0));
-    expect(home).toMatchObject({ type: "score", side: "any", kind: "touchdown", points: 6 });
-    expect(eventKeys(home!)).toEqual(["any.touchdown", "any.score"]);
+    expect(home).toMatchObject({ type: "score", kind: "touchdown", points: 6, team: { abbreviation: "NYG" } });
+    expect(eventKeys(home!)).toEqual(["touchdown", "score"]);
     const [away] = detectEvents(snap("in", 6, 0), snap("in", 6, 3));
-    expect(away).toMatchObject({ side: "any", kind: "field_goal", team: { abbreviation: "DAL" } });
+    expect(away).toMatchObject({ kind: "field_goal", team: { abbreviation: "DAL" } });
+  });
+
+  it("reports a soccer goal", () => {
+    const [e] = detectEvents(snap("in", 0, 0, "soccer/eng.1"), snap("in", 1, 0, "soccer/eng.1"));
+    expect(e).toMatchObject({ kind: "goal" });
   });
 
   it("reports both teams scoring between two polls", () => {
@@ -44,51 +49,47 @@ describe("detectEvents with no followed team", () => {
     expect(detectEvents(snap("in", 6, 0), snap("in", 6, 0))).toEqual([]);
   });
 
-  it("marks kickoff and the final with the winner's colours", () => {
+  it("reports kickoff, a win and a draw", () => {
     const [start] = detectEvents(snap("pre", 0, 0), snap("in", 0, 0));
-    expect(start).toMatchObject({ type: "game_start", side: "any" });
-    expect(eventKeys(start!)).toEqual(["any.game_start"]);
+    expect(eventKeys(start!)).toEqual(["game_start"]);
     const [end] = detectEvents(snap("in", 14, 21), snap("post", 14, 21));
-    expect(end).toMatchObject({ type: "game_end", result: "final", team: { abbreviation: "DAL" } });
-    expect(eventKeys(end!)).toEqual(["any.final"]);
-  });
-
-  it("reports nothing for a tie or an already finished game", () => {
-    expect(detectEvents(snap("in", 20, 20), snap("post", 20, 20))).toEqual([]);
+    expect(end).toMatchObject({ type: "game_end", winner: { abbreviation: "DAL" } });
+    expect(eventKeys(end!)).toEqual(["win"]);
+    const [draw] = detectEvents(snap("in", 20, 20), snap("post", 20, 20));
+    expect(draw).toMatchObject({ type: "game_end", winner: undefined });
+    expect(eventKeys(draw!)).toEqual(["draw"]);
     expect(detectEvents(snap("post", 21, 14), snap("post", 21, 14))).toEqual([]);
-  });
-});
-
-describe("detectEvents with followed teams", () => {
-  it("splits scores into us and them", () => {
-    const [us] = detectEvents(snap("in", 0, 0), snap("in", 6, 0), ["NYG"]);
-    expect(eventKeys(us!)).toEqual(["us.touchdown", "us.score"]);
-    const [them] = detectEvents(snap("in", 7, 0), snap("in", 7, 3), ["NYG"]);
-    expect(eventKeys(them!)).toEqual(["them.field_goal", "them.score"]);
-  });
-
-  it("reports a soccer goal", () => {
-    const [e] = detectEvents(snap("in", 0, 0, "soccer/eng.1"), snap("in", 1, 0, "soccer/eng.1"), ["NYG"]);
-    expect(e).toMatchObject({ kind: "goal", side: "us" });
-  });
-
-  it("reports kickoff and the result from the followed team's side", () => {
-    expect(eventKeys(detectEvents(snap("pre", 0, 0), snap("in", 0, 0), ["DAL"])[0]!)).toEqual(["game_start"]);
-    const end = (teams: string[], home = 21, away = 14) => detectEvents(snap("in", home, away), snap("post", home, away), teams)[0];
-    expect(end(["NYG"])).toMatchObject({ result: "win", team: { abbreviation: "NYG" } });
-    expect(end(["DAL"])).toMatchObject({ result: "loss", team: { abbreviation: "DAL" } });
-    expect(end(["NYG"], 20, 20)).toMatchObject({ result: "draw" });
-  });
-
-  it("counts both teams as us when both are followed", () => {
-    const events = detectEvents(snap("in", 0, 0), snap("in", 7, 3), ["NYG", "DAL"]);
-    expect(events.map((e) => e.type === "score" && e.side)).toEqual(["us", "us"]);
-    const [end] = detectEvents(snap("in", 14, 21), snap("post", 14, 21), ["NYG", "DAL"]);
-    expect(end).toMatchObject({ result: "win", team: { abbreviation: "DAL" } });
   });
 
   it("reports a last-second score together with the final", () => {
-    const events = detectEvents(snap("in", 21, 21), snap("post", 24, 21), ["NYG"]);
+    const events = detectEvents(snap("in", 21, 21), snap("post", 24, 21));
     expect(events.map((e) => e.type)).toEqual(["score", "game_end"]);
+  });
+});
+
+describe("forTeams", () => {
+  const td = detectEvents(snap("in", 0, 0), snap("in", 6, 0))[0]!; // NYG scores
+  const kickoff = detectEvents(snap("pre", 0, 0), snap("in", 0, 0))[0]!;
+  const win = detectEvents(snap("in", 14, 21), snap("post", 14, 21))[0]!; // DAL wins
+  const draw = detectEvents(snap("in", 20, 20), snap("post", 20, 20))[0]!;
+  const team = (e: typeof td, teams: string[]) => forTeams(e, teams)?.team.abbreviation;
+
+  it("gives every event to someone tracking every team", () => {
+    expect(forTeams(td, [])).toEqual({ team: td.game.teams[0]!, keys: ["touchdown", "score"] });
+    expect([kickoff, win, draw].map((e) => team(e, []))).toEqual(["NYG", "DAL", "NYG"]);
+  });
+
+  it("gives either team's score or win to both sides, in the scorer's or winner's colours", () => {
+    expect(team(td, ["NYG"])).toBe("NYG");
+    expect(team(td, ["DAL"])).toBe("NYG");
+    expect(team(win, ["DAL"])).toBe("DAL");
+    expect(team(win, ["NYG"])).toBe("DAL");
+    expect(forTeams(td, ["KC"])).toBeUndefined();
+  });
+
+  it("gives a kickoff or a draw to either team, in the tracked team's colours", () => {
+    expect(team(kickoff, ["DAL"])).toBe("DAL");
+    expect(team(draw, ["DAL", "KC"])).toBe("DAL");
+    expect(forTeams(kickoff, ["KC"])).toBeUndefined();
   });
 });

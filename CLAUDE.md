@@ -22,8 +22,8 @@ Data flows one way: sources -> tracker -> events -> dispatcher -> bridge.
 | --- | --- |
 | `src/sources/poll.ts` | Polls ESPN and hands the whole scoreboard to the tracker |
 | `src/sources/webhook.ts` | Signed HTTP receiver; `WebhookAdapter` maps a provider payload to snapshots. Only the `generic` adapter exists |
-| `src/tracker.ts` | Last known state of every followed game; merges sources so each play fires once |
-| `src/events.ts` | `detectEvents` diffs two snapshots of a game; `eventKeys` maps an event to config keys |
+| `src/tracker.ts` | Last known state of every game; merges sources so each play fires once |
+| `src/events.ts` | `detectEvents` diffs two snapshots of a game; `forTeams` decides whether an event is for a set of tracked teams; `eventKeys` maps it to config keys |
 | `src/runner.ts` | Wires sources to the tracker; the dispatcher queues effects and picks colours |
 | `src/hue.ts` | Bridge client over a `HueTransport`: pairing, rooms/zones, `signal` (bridge-run flash) and `pulse` (manual flash + restore) |
 | `src/hue-local.ts` | LAN transport (Bun `tls`, self-signed bridge certificate) |
@@ -41,7 +41,7 @@ Data flows one way: sources -> tracker -> events -> dispatcher -> bridge.
 - **The tracker owns deduplication.** Sources must not diff or dedupe themselves; they report what they see. The merge rules (stale lower scores, state never moving backwards, late redeliveries) live in `Tracker.merge` and are covered by `test/tracker.test.ts`.
 - **Games are matched across sources by their two team abbreviations**, never by id. Anything producing a `GameSnapshot` must pass team names through `canonicalAbbreviation`.
 - **A game's first sighting only sets a baseline** and fires nothing, so starting mid-game does not replay the score.
-- **Effect sides:** `us`/`them` exist only in a followed team's game; with no `teams` configured every score is `any`.
+- **Events are team-neutral and the tracker follows every game.** Game state is the same for everyone; only `forTeams` decides whether an event belongs to someone's tracked teams (any event in one of their games, opponents' scores included). Keep per-user choices (teams, effects, delay) out of the tracker so one tracker can serve every user.
 - **NFL colours in `src/nfl.ts` are lamp colours, not brand colours** (black dropped, silver as white, some shades saturated). They were chosen without seeing real bulbs.
 - **`createWebhookHandler` must stay a plain `Request -> Response` function** with no Bun-specific calls, so it can run as a Cloudflare Worker.
 - **`hue.ts` and `hue-remote.ts` must stay Worker-safe** (only `fetch` and Web globals). Bun and Node calls go in `hue-local.ts` or `token-file.ts`.

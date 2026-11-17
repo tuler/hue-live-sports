@@ -11,22 +11,14 @@ export type ScoreKind =
   | "score";
 
 /**
- * Whose event it is. "us" and "them" only exist in a game involving a
- * followed team; in every other game the side is "any".
+ * Something that happened in a game, said the same way for everyone. Who
+ * cares about it is decided later, per viewer, by `forTeams`.
  */
-export type Side = "us" | "them" | "any";
-
 export type SportsEvent =
-  | { type: "game_start"; side: "us" | "any"; team: TeamSide; game: GameSnapshot }
-  | { type: "score"; side: Side; kind: ScoreKind; points: number; team: TeamSide; game: GameSnapshot }
-  | {
-      type: "game_end";
-      /** "final" is a game with no followed team that ended with a winner. */
-      result: "win" | "loss" | "draw" | "final";
-      /** The team whose colours mark the result. */
-      team: TeamSide;
-      game: GameSnapshot;
-    };
+  | { type: "game_start"; game: GameSnapshot }
+  | { type: "score"; kind: ScoreKind; points: number; team: TeamSide; game: GameSnapshot }
+  /** `winner` is absent for a draw. */
+  | { type: "game_end"; winner?: TeamSide; game: GameSnapshot };
 
 /**
  * Name a score change from the size of the jump alone.
@@ -55,56 +47,32 @@ export function classifyScore(sport: Sport, delta: number): ScoreKind {
 
 /**
  * Compare two polls of the same game and report what happened in between.
- * `teams` are the followed teams; leave it empty to treat every team alike.
  *
  * The first poll (no `prev`) only sets the baseline, so starting the service
  * mid-game does not replay the existing score. Score decreases (an overturned
  * touchdown, a goal disallowed on review) are ignored and become the new
  * baseline.
  */
-export function detectEvents(
-  prev: GameSnapshot | undefined,
-  next: GameSnapshot,
-  teams: readonly string[] = [],
-): SportsEvent[] {
+export function detectEvents(prev: GameSnapshot | undefined, next: GameSnapshot): SportsEvent[] {
   if (!prev || prev.id !== next.id) return [];
   const [home, away] = next.teams;
   if (!home || !away) return [];
   const events: SportsEvent[] = [];
-  const ours = next.teams.filter((t) => isAnyTeam(t, teams));
-  const sideOf = (t: TeamSide): Side => (ours.length === 0 ? "any" : ours.includes(t) ? "us" : "them");
 
-  if (prev.state === "pre" && next.state === "in") {
-    events.push({ type: "game_start", side: ours.length ? "us" : "any", team: ours[0] ?? home, game: next });
-  }
+  if (prev.state === "pre" && next.state === "in") events.push({ type: "game_start", game: next });
 
   for (const side of next.teams) {
     const before = prev.teams.find((t) => t.id === side.id);
     if (!before) continue;
     const points = side.score - before.score;
     if (points > 0) {
-      events.push({
-        type: "score",
-        side: sideOf(side),
-        kind: classifyScore(next.sport, points),
-        points,
-        team: side,
-        game: next,
-      });
+      events.push({ type: "score", kind: classifyScore(next.sport, points), points, team: side, game: next });
     }
   }
 
   if (prev.state !== "post" && next.state === "post") {
     const winner = home.score === away.score ? undefined : home.score > away.score ? home : away;
-    if (ours.length === 0) {
-      if (winner) events.push({ type: "game_end", result: "final", team: winner, game: next });
-    } else if (!winner) {
-      events.push({ type: "game_end", result: "draw", team: ours[0]!, game: next });
-    } else if (ours.includes(winner)) {
-      events.push({ type: "game_end", result: "win", team: winner, game: next });
-    } else {
-      events.push({ type: "game_end", result: "loss", team: ours[0]!, game: next });
-    }
+    events.push({ type: "game_end", winner, game: next });
   }
 
   return events;
@@ -114,12 +82,41 @@ export function detectEvents(
 export function eventKeys(event: SportsEvent): string[] {
   switch (event.type) {
     case "game_start":
-      return [event.side === "any" ? "any.game_start" : "game_start"];
+      return ["game_start"];
     case "game_end":
-      return [event.result === "final" ? "any.final" : event.result];
+      return [event.winner ? "win" : "draw"];
     case "score":
-      return [`${event.side}.${event.kind}`, `${event.side}.score`];
+      return [event.kind, "score"];
   }
+}
+
+/** Every key an effect can be configured under. */
+export const EFFECT_KEYS: readonly string[] = [
+  "touchdown",
+  "field_goal",
+  "extra_point",
+  "two_points",
+  "goal",
+  "run",
+  "basket",
+  "score",
+  "game_start",
+  "win",
+  "draw",
+] satisfies readonly (ScoreKind | "game_start" | "win" | "draw")[];
+
+/**
+ * An event as seen by someone tracking `teams` (empty: every team), or
+ * undefined if it is not theirs. Every event in a tracked team's game is
+ * theirs, the opponent's scores and wins included. `team` is whose colours to
+ * show: the scorer's or the winner's, else (kickoff, draw) the tracked team's.
+ */
+export function forTeams(event: SportsEvent, teams: readonly string[]): { team: TeamSide; keys: string[] } | undefined {
+  const tracked = (t: TeamSide) => teams.length === 0 || isAnyTeam(t, teams);
+  const mine = event.game.teams.find(tracked);
+  if (!mine) return undefined;
+  const team = event.type === "score" ? event.team : event.type === "game_end" ? (event.winner ?? mine) : mine;
+  return { team, keys: eventKeys(event) };
 }
 
 export function describe(event: SportsEvent): string {
@@ -128,7 +125,7 @@ export function describe(event: SportsEvent): string {
     case "game_start":
       return `Game started: ${event.game.name}`;
     case "game_end":
-      return `Final (${event.result === "final" ? `${event.team.abbreviation} win` : event.result}): ${score}`;
+      return `Final (${event.winner ? `${event.winner.abbreviation} win` : "draw"}): ${score}`;
     case "score":
       return `${event.team.abbreviation} ${event.kind.replace("_", " ")} (+${event.points}): ${score} [${event.game.detail}]`;
   }

@@ -2,7 +2,7 @@
 import { parseArgs } from "node:util";
 import { toLamp, type XY } from "./color.ts";
 import { DEFAULT_CONFIG_PATH, effectFor, loadConfig } from "./config.ts";
-import { fetchScoreboard, followedGames, isAnyTeam, isTeam, LEAGUES, resolveLeague } from "./espn.ts";
+import { fetchScoreboard, followedGames, isTeam, LEAGUES, resolveLeague } from "./espn.ts";
 import { discoverBridges, HueBridge } from "./hue.ts";
 import { localTransport } from "./hue-local.ts";
 import { codeFromRedirect, HueRemoteAuth, remoteTransport } from "./hue-remote.ts";
@@ -22,8 +22,8 @@ Commands
   games             Show the games being followed
   teams             List the 32 NFL teams and their lamp colours
   test <effect> [team]
-                    Play one effect now, e.g. "any.touchdown KC", "us.touchdown", "win".
-                    Uses [team]'s colours, else the first followed team's
+                    Play one effect now, e.g. "touchdown KC", "win".
+                    Uses [team]'s colours, else the first tracked team's
   run               Watch the games and flash the lights
   emit <home> <score> <away> <score> [pre|in|post]
                     Send a signed test update to the webhook receiver
@@ -149,10 +149,9 @@ async function main(): Promise<void> {
       const effect = effectFor(config, [arg]);
       if (!effect) throw new Error(`Effect "${arg}" is unknown or disabled in ${values.config}.`);
       const league = resolveLeague(config.league);
-      const them = arg.startsWith("them.");
 
-      // Whose colours to show: the named team, else the first followed team.
-      const name = teamArg ?? (them ? undefined : config.teams[0]);
+      // Whose colours to show: the named team, else the first tracked team.
+      const name = teamArg ?? config.teams[0];
       let colors: XY[];
       if (effect.colors?.length) {
         colors = toLamp(effect.colors);
@@ -163,12 +162,8 @@ async function main(): Promise<void> {
       } else {
         // Other leagues take colours from the scoreboard, so only for teams playing today.
         const games = await fetchScoreboard(league).catch(() => []);
-        const side = name
-          ? games.flatMap((g) => g.teams).find((t) => isTeam(t, name))
-          : followedGames(games, config.teams)
-              .flatMap((g) => g.teams)
-              .find((t) => config.teams.length > 0 && !isAnyTeam(t, config.teams));
-        if (!name && !side) throw new Error(`Name a team to preview, e.g. "test ${arg} <team>".`);
+        if (!name) throw new Error(`Name a team to preview, e.g. "test ${arg} <team>".`);
+        const side = games.flatMap((g) => g.teams).find((t) => isTeam(t, name));
         if (!side) console.log("That team has no game listed today, so its colours are unknown: flashing white.");
         colors = teamColors(league, side);
       }

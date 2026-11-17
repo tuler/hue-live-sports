@@ -1,4 +1,4 @@
-import { followedGames, type GameSnapshot, type GameState, type TeamSide } from "./espn.ts";
+import { type GameSnapshot, type GameState, type TeamSide } from "./espn.ts";
 import { detectEvents, type SportsEvent } from "./events.ts";
 
 /**
@@ -29,8 +29,9 @@ interface Tracked {
 }
 
 /**
- * Holds the last known state of every followed game and turns updates from
- * any number of sources into events.
+ * Holds the last known state of every game and turns updates from any number
+ * of sources into events. It follows every game it is told about, so one
+ * tracker can serve everyone; who cares about an event is `forTeams`'s call.
  *
  * Sources disagree for a while after every play, because some are faster
  * than others. The tracker merges them so each event fires once:
@@ -43,10 +44,7 @@ interface Tracked {
 export class Tracker {
   private readonly tracked = new Map<string, Tracked>();
 
-  constructor(
-    private readonly teams: readonly string[],
-    private readonly now: () => number = Date.now,
-  ) {}
+  constructor(private readonly now: () => number = Date.now) {}
 
   games(): GameSnapshot[] {
     return [...this.tracked.values()].map((t) => t.game);
@@ -62,7 +60,7 @@ export class Tracker {
     const events: SportsEvent[] = [];
     const listed = new Set<string>();
 
-    for (const incoming of followedGames(games, this.teams)) {
+    for (const incoming of games) {
       const key = gameKey(incoming);
       listed.add(key);
       const asOf = incoming.asOf ?? now;
@@ -80,7 +78,7 @@ export class Tracker {
       known.sources.set(source, asOf);
       known.seenAt = now;
       const merged = this.merge(known, incoming, source, now);
-      events.push(...detectEvents(known.game, merged, this.teams));
+      events.push(...detectEvents(known.game, merged));
       known.game = merged;
     }
 

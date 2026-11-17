@@ -2,7 +2,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { lampColors, toLamp } from "./color.ts";
 import { effectFor, type Config, type Effect } from "./config.ts";
 import { resolveLeague, type GameSnapshot, type TeamSide } from "./espn.ts";
-import { describe, eventKeys, type SportsEvent } from "./events.ts";
+import { describe, forTeams, type SportsEvent } from "./events.ts";
 import type { HueBridge, LightGroup } from "./hue.ts";
 import type { XY } from "./color.ts";
 import { findNflTeam, NFL_LEAGUE } from "./nfl.ts";
@@ -29,9 +29,9 @@ export function teamColors(
   return nfl ? toLamp(nfl.colors) : lampColors(side?.color, side?.alternateColor);
 }
 
-/** Colours for an event: the effect's override, else those of the event's team. */
-export function colorsFor(event: SportsEvent, effect: Effect, league: string): XY[] {
-  return effect.colors?.length ? toLamp(effect.colors) : teamColors(league, event.team);
+/** Colours for an effect: its own override, else those of `team`. */
+export function colorsFor(team: TeamSide, effect: Effect, league: string): XY[] {
+  return effect.colors?.length ? toLamp(effect.colors) : teamColors(league, team);
 }
 
 export async function play(lights: Lights, config: Config, effect: Effect, colors: XY[]): Promise<void> {
@@ -59,10 +59,12 @@ export function createDispatcher(config: Config, lights: Lights | undefined, lea
   return {
     handle(events) {
       for (const event of events) {
+        const mine = forTeams(event, config.teams);
+        if (!mine) continue;
         log(describe(event));
-        const effect = effectFor(config, eventKeys(event));
+        const effect = effectFor(config, mine.keys);
         if (!effect || !lights) continue;
-        const colors = colorsFor(event, effect, league);
+        const colors = colorsFor(mine.team, effect, league);
         // Due at a fixed time, so the TV delay is not added once per queued effect.
         const dueAt = Date.now() + config.delaySeconds * 1000;
         queue = queue
@@ -101,9 +103,9 @@ export async function run(
   options: RunOptions = {},
 ): Promise<void> {
   const league = resolveLeague(config.league);
-  const tracker = new Tracker(config.teams);
+  const tracker = new Tracker();
   const dispatcher = createDispatcher(config, lights, league);
-  const who = config.teams.length ? config.teams.join(", ") : "every game";
+  const who = config.teams.length ? config.teams.join(", ") : "every team";
   log(`Watching ${who} in ${league}${lights ? ` on "${lights.group.name}"` : " (dry run)"}`);
 
   const webhook = config.webhook;

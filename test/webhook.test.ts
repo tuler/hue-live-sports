@@ -15,9 +15,9 @@ const update = (home: number, away: number, state = "in", extra: object = {}) =>
   state, home: { team: "Giants", score: home }, away: { team: "DAL", score: away }, ...extra,
 });
 
-function receiver(teams: string[] = []) {
+function receiver() {
   const seen: SportsEvent[] = [];
-  const tracker = new Tracker(teams);
+  const tracker = new Tracker();
   const handle = createWebhookHandler(tracker, {
     league: "football/nfl", path: "/hook", secret: SECRET, adapter: genericAdapter,
     onEvents: (events) => void seen.push(...events),
@@ -37,17 +37,17 @@ describe("webhook handler", () => {
     expect(await post(update(7, 0))).toEqual({ status: 200, json: { games: 1, events: 1 } });
     expect(await post(update(7, 0))).toMatchObject({ json: { events: 0 } }); // a provider retry
     expect(await post(update(7, 3, "post"))).toMatchObject({ json: { events: 2 } });
-    expect(keys()).toEqual(["any.touchdown", "any.field_goal", "any.final"]);
+    expect(keys()).toEqual(["touchdown", "field_goal", "win"]);
     // "Giants" was normalised to the table's abbreviation.
     expect(tracker.games()[0]).toMatchObject({ name: "DAL @ NYG", sport: "football" });
   });
 
-  it("accepts a list of games and respects followed teams", async () => {
-    const { post, keys } = receiver(["KC"]);
+  it("accepts a list of games", async () => {
+    const { post, keys } = receiver();
     const kc = (score: number) => ({ state: "in", home: { team: "KC", score }, away: { team: "BUF", score: 0 } });
     await post({ games: [update(0, 0), kc(0)] });
-    expect(await post([update(7, 0), kc(3)])).toMatchObject({ json: { games: 2, events: 1 } });
-    expect(keys()).toEqual(["us.field_goal"]);
+    expect(await post([update(7, 0), kc(3)])).toMatchObject({ json: { games: 2, events: 2 } });
+    expect(keys()).toEqual(["touchdown", "field_goal"]);
   });
 
   it("rejects unsigned, mis-signed, tampered and stale requests", async () => {
@@ -115,7 +115,7 @@ describe("service with a webhook receiver", () => {
       await send(url, update(0, 0));
       await send(url, update(6, 0));
     });
-    expect(calls).toEqual([{ signal: "alternating", seconds: 6, colors: [hexToXy("0B2265"), hexToXy("A71930")] }]);
+    expect(calls).toEqual([{ signal: "alternating", seconds: 10, colors: [hexToXy("0B2265"), hexToXy("A71930")] }]);
   });
 
   it("flashes once when the poller and a webhook both report a score", async () => {
@@ -130,7 +130,7 @@ describe("service with a webhook receiver", () => {
       },
       [before, before, after],
     );
-    expect(calls).toEqual([{ signal: "on_off_color", seconds: 3, colors: [hexToXy("003594"), hexToXy("FFFFFF")] }]);
+    expect(calls).toEqual([{ signal: "on_off_color", seconds: 5, colors: [hexToXy("003594"), hexToXy("FFFFFF")] }]);
   });
 
   it("refuses to start a receiver without a secret", async () => {

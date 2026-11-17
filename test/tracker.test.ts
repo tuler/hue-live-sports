@@ -12,9 +12,9 @@ const game = (home: number, away: number, state: FakeGame["state"] = "in", id = 
 });
 
 /** A tracker on a clock the test moves by hand. */
-function tracker(teams: string[] = []) {
+function tracker() {
   let now = 1_000_000;
-  const t = new Tracker(teams, () => now);
+  const t = new Tracker(() => now);
   return {
     t,
     advance: (ms: number) => void (now += ms),
@@ -35,26 +35,20 @@ describe("Tracker with one source", () => {
     { id: "3", state: "in", home: ["SF", 0], away: ["SEA", 0] },
     { id: "4", state: "in", home: ["GB", 14], away: ["CHI", 3] },
   ];
-  const keys = (teams: string[]) => {
-    const { feed } = tracker(teams);
+  const keys = () => {
+    const { feed } = tracker();
     expect(feed("poll", first)).toEqual([]);
     return feed("poll", second);
   };
 
-  it("follows every game by default", () => {
+  it("follows every game", () => {
     // Game 2 ends tied after a BUF field goal; game 4 is new, so it only sets a baseline.
-    expect(keys([])).toEqual(["any.touchdown", "any.field_goal", "any.game_start"]);
-  });
-
-  it("follows only the named teams' games", () => {
-    expect(keys(["DAL"])).toEqual(["them.touchdown"]);
-    expect(keys(["BUF", "SEA"])).toEqual(["us.field_goal", "draw", "game_start"]);
-    expect(keys(["PHI"])).toEqual([]);
+    expect(keys()).toEqual(["touchdown", "field_goal", "draw", "game_start"]);
   });
 
   it("turns default-on events into effects and skips default-off ones", () => {
     const config = parseConfig({ league: "nfl", group: "Den" });
-    expect(keys([]).filter((k) => effectFor(config, [k!]))).toEqual(["any.touchdown", "any.field_goal"]);
+    expect(keys().filter((k) => effectFor(config, [k!]))).toEqual(["touchdown", "field_goal"]);
   });
 
   it("drops a game its only source stops listing, and re-baselines it on return", () => {
@@ -62,15 +56,16 @@ describe("Tracker with one source", () => {
     feed("poll", first);
     feed("poll", [first[1]!]);
     expect(t.games().map((g) => g.name)).toEqual(["BUF @ KC"]);
-    expect(feed("poll", second)).toEqual(["any.field_goal"]);
+    // Game 2 goes on to end tied, so a draw follows BUF's field goal.
+    expect(feed("poll", second)).toEqual(["field_goal", "draw"]);
   });
 
   it("accepts a correction from the source that reported the score", () => {
     const { feed } = tracker();
     feed("poll", [game(0, 0)]);
-    expect(feed("poll", [game(6, 0)])).toEqual(["any.touchdown"]);
+    expect(feed("poll", [game(6, 0)])).toEqual(["touchdown"]);
     expect(feed("poll", [game(0, 0)])).toEqual([]); // overturned on review
-    expect(feed("poll", [game(6, 0)])).toEqual(["any.touchdown"]);
+    expect(feed("poll", [game(6, 0)])).toEqual(["touchdown"]);
   });
 
   it("forgets a game nobody has reported on for half a day", () => {
@@ -87,16 +82,16 @@ describe("Tracker with a webhook and a poller", () => {
     const { feed } = tracker();
     feed("poll", [game(0, 0, "in", "espn-401")]);
     // The providers number the game differently; it is matched by its teams.
-    expect(feed("webhook", [game(6, 0, "in", "rt-77")])).toEqual(["any.touchdown"]);
+    expect(feed("webhook", [game(6, 0, "in", "rt-77")])).toEqual(["touchdown"]);
     expect(feed("poll", [game(6, 0, "in", "espn-401")])).toEqual([]);
-    expect(feed("poll", [game(6, 3, "in", "espn-401")])).toEqual(["any.field_goal"]);
+    expect(feed("poll", [game(6, 3, "in", "espn-401")])).toEqual(["field_goal"]);
     expect(feed("webhook", [game(6, 3, "in", "rt-77")])).toEqual([]);
   });
 
   it("ignores the slower source's stale score instead of re-firing", () => {
     const { feed } = tracker();
     feed("poll", [game(0, 0)]);
-    expect(feed("webhook", [game(7, 0)])).toEqual(["any.touchdown"]);
+    expect(feed("webhook", [game(7, 0)])).toEqual(["touchdown"]);
     expect(feed("poll", [game(0, 0)])).toEqual([]); // the poll has not caught up
     expect(feed("poll", [game(7, 0)])).toEqual([]); // and now it has: no second flash
   });
@@ -108,11 +103,11 @@ describe("Tracker with a webhook and a poller", () => {
     advance(STALE_SCORE_MS + 1);
     expect(feed("poll", [game(0, 0)])).toEqual([]);
     expect(t.games()[0]?.teams.map((x) => x.score)).toEqual([0, 0]);
-    expect(feed("poll", [game(6, 0)])).toEqual(["any.touchdown"]);
+    expect(feed("poll", [game(6, 0)])).toEqual(["touchdown"]);
   });
 
   it("never moves a game backwards, so the final fires once", () => {
-    const { feed } = tracker(["NYG"]);
+    const { feed } = tracker();
     feed("poll", [game(21, 14)]);
     expect(feed("webhook", [game(21, 14, "post")])).toEqual(["win"]);
     expect(feed("poll", [game(21, 14, "in")])).toEqual([]);
@@ -124,7 +119,7 @@ describe("Tracker with a webhook and a poller", () => {
     feed("webhook", [game(0, 0)]);
     feed("poll", []);
     expect(t.games()).toHaveLength(1);
-    expect(feed("webhook", [game(3, 0)])).toEqual(["any.field_goal"]);
+    expect(feed("webhook", [game(3, 0)])).toEqual(["field_goal"]);
   });
 
   it("drops a webhook redelivered after a newer one", () => {
