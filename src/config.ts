@@ -15,11 +15,15 @@ export interface Config {
   /** Alias ("nfl", "epl") or ESPN path ("soccer/eng.1"). */
   league: string;
   /**
-   * Team abbreviation as ESPN shows it, or its full display name. For the NFL
-   * any of the 32 teams by abbreviation, nickname or full name ("Giants"),
-   * stored here as the abbreviation.
+   * Teams to follow. Empty (the default) follows every game in the league and
+   * treats all teams alike. Otherwise only these teams' games are followed,
+   * and effects distinguish "us" from "them".
+   *
+   * Entries are ESPN abbreviations or full display names. For the NFL any of
+   * the 32 teams by abbreviation, nickname or full name ("Giants"), stored
+   * here as abbreviations.
    */
-  team: string;
+  teams: string[];
   /** Name of the Hue room or zone to flash. */
   group: string;
   /** How often to poll while the game is live. */
@@ -34,7 +38,10 @@ export interface Config {
 const on = (seconds: number, signal: Signal = "on_off_color"): Effect => ({ enabled: true, seconds, signal });
 const off: Effect = { enabled: false, seconds: 0, signal: "on_off_color" };
 
-/** Keys are `<side>.<kind>` with a `<side>.score` fallback, plus game-level events. */
+/**
+ * Keys are `<side>.<kind>` with a `<side>.score` fallback, plus game-level
+ * events. Sides are `us` and `them` in a followed team's game, `any` elsewhere.
+ */
 export const DEFAULT_EFFECTS: Record<string, Effect> = {
   "us.touchdown": on(10, "alternating"),
   "us.goal": on(10, "alternating"),
@@ -47,6 +54,17 @@ export const DEFAULT_EFFECTS: Record<string, Effect> = {
   "them.extra_point": off,
   "them.basket": off,
   "them.score": on(3),
+  // Games without a followed team. Shorter, since several can be live at once.
+  "any.touchdown": on(6, "alternating"),
+  "any.goal": on(6, "alternating"),
+  "any.field_goal": on(3),
+  "any.run": on(3),
+  "any.two_points": on(2),
+  "any.extra_point": off,
+  "any.basket": off,
+  "any.score": on(3),
+  "any.game_start": off,
+  "any.final": on(5, "alternating"),
   game_start: on(5),
   win: on(15, "alternating"),
   loss: off,
@@ -94,11 +112,17 @@ export function parseConfig(raw: unknown): Config {
   }
 
   const league = text("league");
-  const team = text("team");
+  // `team` is shorthand for a one-entry `teams`.
+  const listed = c.teams ?? (c.team === undefined ? [] : [c.team]);
+  if (!Array.isArray(listed) || listed.some((t) => typeof t !== "string" || t.trim() === "")) {
+    throw new Error('Config "teams" must be a list of team names');
+  }
+  const nfl = resolveLeague(league) === NFL_LEAGUE;
+  const teams = [...new Set((listed as string[]).map((t) => (nfl ? requireNflTeam(t).abbr : t.trim())))];
 
   return {
     league,
-    team: resolveLeague(league) === NFL_LEAGUE ? requireNflTeam(team).abbr : team,
+    teams,
     group: text("group"),
     // ESPN refreshes no faster than every few seconds; polling harder gains nothing.
     pollSeconds: seconds("pollSeconds", 10, 5),

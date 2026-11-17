@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { findGame, parseScoreboard, resolveLeague, sportOf } from "../src/espn.ts";
-import { scoreboard } from "./fixture.ts";
+import { followedGames, parseScoreboard, resolveLeague, sportOf } from "../src/espn.ts";
+import { board, scoreboard } from "./fixture.ts";
 
 describe("espn", () => {
   it("resolves aliases and raw paths", () => {
@@ -22,10 +22,19 @@ describe("espn", () => {
     expect(parseScoreboard({ events: "nope" }, "football/nfl")).toEqual([]);
   });
 
-  it("finds a team by abbreviation or name", () => {
-    const games = parseScoreboard(scoreboard("in", 0, 0), "football/nfl");
-    expect(findGame(games, "nyg")?.id).toBe("401");
-    expect(findGame(games, "Dallas Cowboys")?.id).toBe("401");
-    expect(findGame(games, "PHI")).toBeUndefined();
+  it("follows every game unless teams are named", () => {
+    const games = parseScoreboard(
+      board([
+        { id: "1", state: "in", home: ["NYG", 0], away: ["DAL", 0] },
+        { id: "2", state: "in", home: ["KC", 0], away: ["BUF", 0] },
+        { id: "3", state: "pre", home: ["SF", 0], away: ["SEA", 0] },
+      ]),
+      "football/nfl",
+    );
+    const ids = (teams: string[]) => followedGames(games, teams).map((g) => g.id);
+    expect(ids([])).toEqual(["1", "2", "3"]);
+    expect(ids(["buf"])).toEqual(["2"]);
+    expect(ids(["Team NYG", "SEA"])).toEqual(["1", "3"]);
+    expect(ids(["PHI"])).toEqual([]);
   });
 });

@@ -2,7 +2,7 @@
 import { parseArgs } from "node:util";
 import { toLamp, type XY } from "./color.ts";
 import { DEFAULT_CONFIG_PATH, effectFor, loadConfig } from "./config.ts";
-import { fetchScoreboard, findGame, isTeam, LEAGUES, resolveLeague } from "./espn.ts";
+import { fetchScoreboard, followedGames, isAnyTeam, isTeam, LEAGUES, resolveLeague } from "./espn.ts";
 import { discoverBridges, HueBridge } from "./hue.ts";
 import { fullName, NFL_LEAGUE, NFL_TEAMS, requireNflTeam } from "./nfl.ts";
 import { play, run, teamColors } from "./runner.ts";
@@ -13,12 +13,12 @@ Commands
   discover          Find Hue bridges on this network
   pair              Create an app key (press the bridge's link button first)
   groups            List rooms and zones on the bridge
-  game              Show the configured team's current game
+  games             Show the games being followed
   teams             List the 32 NFL teams and their lamp colours
   test <effect> [team]
-                    Play one effect now, e.g. "us.touchdown", "them.score", "win".
-                    Uses the configured team's colours, or [team]'s if given
-  run               Watch the game and flash the lights
+                    Play one effect now, e.g. "any.touchdown KC", "us.touchdown", "win".
+                    Uses [team]'s colours, else the first followed team's
+  run               Watch the games and flash the lights
 
 Options
   -c, --config <path>   Config file (default: ${DEFAULT_CONFIG_PATH})
@@ -71,16 +71,17 @@ async function main(): Promise<void> {
       for (const g of await bridge(values.ip, true).groups()) console.log(`${g.kind}\t${g.name}`);
       return;
     }
-    case "game": {
+    case "game":
+    case "games": {
       const config = loadConfig(values.config);
-      const game = findGame(await fetchScoreboard(resolveLeague(config.league)), config.team);
-      if (!game) {
-        console.log(`${config.team} has no game on today's ${config.league} scoreboard.`);
+      const games = followedGames(await fetchScoreboard(resolveLeague(config.league)), config.teams);
+      if (games.length === 0) {
+        console.log(`No ${config.teams.join(", ") || config.league} games on the scoreboard right now.`);
         return;
       }
-      console.log(`${game.name}: ${game.detail} (${game.state})`);
-      for (const t of game.teams) {
-        console.log(`  ${t.abbreviation.padEnd(5)} ${String(t.score).padStart(3)}  ${t.name}  #${t.color ?? "?"} / #${t.alternateColor ?? "?"}`);
+      for (const g of games) {
+        const score = g.teams.map((t) => `${t.abbreviation} ${t.score}`).join(" - ");
+        console.log(`${g.state.padEnd(4)} ${score.padEnd(18)} ${g.detail}`);
       }
       return;
     }
@@ -101,18 +102,24 @@ async function main(): Promise<void> {
       const league = resolveLeague(config.league);
       const them = arg.startsWith("them.");
 
+      // Whose colours to show: the named team, else the first followed team.
+      const name = teamArg ?? (them ? undefined : config.teams[0]);
       let colors: XY[];
       if (effect.colors?.length) {
         colors = toLamp(effect.colors);
-      } else if (league === NFL_LEAGUE && (teamArg || !them)) {
+      } else if (league === NFL_LEAGUE) {
         // NFL colours are built in, so no game needs to be on.
-        colors = teamColors(league, { abbreviation: requireNflTeam(teamArg ?? config.team).abbr });
+        if (!name) throw new Error(`Name a team to preview, e.g. "test ${arg} KC" (see: teams).`);
+        colors = teamColors(league, { abbreviation: requireNflTeam(name).abbr });
       } else {
-        // Otherwise colours come from the scoreboard, and only for teams playing today.
-        const sides = (await fetchScoreboard(league).catch(() => []))
-          .filter((g) => g.teams.some((t) => isTeam(t, teamArg ?? config.team)))
-          .flatMap((g) => g.teams);
-        const side = sides.find((t) => (teamArg ? isTeam(t, teamArg) : isTeam(t, config.team) !== them));
+        // Other leagues take colours from the scoreboard, so only for teams playing today.
+        const games = await fetchScoreboard(league).catch(() => []);
+        const side = name
+          ? games.flatMap((g) => g.teams).find((t) => isTeam(t, name))
+          : followedGames(games, config.teams)
+              .flatMap((g) => g.teams)
+              .find((t) => config.teams.length > 0 && !isAnyTeam(t, config.teams));
+        if (!name && !side) throw new Error(`Name a team to preview, e.g. "test ${arg} <team>".`);
         if (!side) console.log("That team has no game listed today, so its colours are unknown: flashing white.");
         colors = teamColors(league, side);
       }

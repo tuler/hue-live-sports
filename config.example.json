@@ -1,13 +1,12 @@
 {
   "league": "nfl",
-  "team": "NYG",
+  "teams": [],
   "group": "Living Room",
   "pollSeconds": 10,
   "delaySeconds": 0,
   "effectMode": "signal",
   "effects": {
-    "us.touchdown": { "seconds": 10, "signal": "alternating" },
-    "them.score": { "seconds": 3, "signal": "on_off_color" },
-    "loss": { "enabled": false }
+    "any.touchdown": { "seconds": 6, "signal": "alternating" },
+    "any.extra_point": { "enabled": false }
   }
 }

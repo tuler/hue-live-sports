@@ -25,10 +25,13 @@ describe("color", () => {
 });
 
 describe("config", () => {
-  const base = { league: "nfl", team: "NYG", group: "Living Room" };
+  const base = { league: "nfl", group: "Living Room" };
   it("applies defaults", () => {
     const c = parseConfig(base);
-    expect(c).toMatchObject({ pollSeconds: 10, delaySeconds: 0, effectMode: "signal" });
+    expect(c).toMatchObject({ teams: [], pollSeconds: 10, delaySeconds: 0, effectMode: "signal" });
+    expect(effectFor(c, ["any.touchdown", "any.score"])).toMatchObject({ seconds: 6 });
+    expect(effectFor(c, ["any.extra_point", "any.score"])).toBeUndefined();
+    expect(effectFor(c, ["any.game_start"])).toBeUndefined();
     expect(effectFor(c, ["us.touchdown", "us.score"])).toMatchObject({ seconds: 10, signal: "alternating" });
   });
   it("falls back to the side's generic effect", () => {
@@ -43,7 +46,9 @@ describe("config", () => {
     expect(effectFor(c, ["us.goal", "us.score"])).toBeUndefined();
   });
   it("rejects invalid values", () => {
-    expect(() => parseConfig({ ...base, team: "" })).toThrow(/team/);
+    expect(() => parseConfig({ ...base, teams: "NYG" })).toThrow(/teams/);
+    expect(() => parseConfig({ ...base, teams: ["NYG", ""] })).toThrow(/teams/);
+    expect(() => parseConfig({ ...base, group: "" })).toThrow(/group/);
     expect(() => parseConfig({ ...base, pollSeconds: 1 })).toThrow(/pollSeconds/);
     expect(() => parseConfig({ ...base, effectMode: "disco" })).toThrow(/effectMode/);
   });

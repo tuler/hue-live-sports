@@ -154,9 +154,11 @@ export function isTeam(side: TeamSide, team: string): boolean {
   return side.abbreviation.toLowerCase() === q || side.name.toLowerCase() === q;
 }
 
-/** The team's game on the board, preferring live, then upcoming, then finished. */
-export function findGame(games: GameSnapshot[], team: string): GameSnapshot | undefined {
-  const mine = games.filter((g) => g.teams.some((t) => isTeam(t, team)));
-  const rank: Record<GameState, number> = { in: 0, pre: 1, post: 2 };
-  return mine.sort((a, b) => rank[a.state] - rank[b.state])[0];
+export const isAnyTeam = (side: TeamSide, teams: readonly string[]): boolean =>
+  teams.some((team) => isTeam(side, team));
+
+/** The games to watch: every game, or only those involving one of `teams`. */
+export function followedGames(games: GameSnapshot[], teams: readonly string[]): GameSnapshot[] {
+  if (teams.length === 0) return games;
+  return games.filter((g) => g.teams.some((t) => isAnyTeam(t, teams)));
 }

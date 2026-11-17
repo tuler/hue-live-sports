@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { hexToXy } from "../src/color.ts";
 import { parseConfig } from "../src/config.ts";
-import { findGame, parseScoreboard } from "../src/espn.ts";
+import { followedGames, parseScoreboard } from "../src/espn.ts";
 import { findNflTeam, NFL_TEAMS, requireNflTeam } from "../src/nfl.ts";
 import { teamColors } from "../src/runner.ts";
 import { scoreboard } from "./fixture.ts";
@@ -59,21 +59,21 @@ describe("NFL teams", () => {
 describe("NFL config and scoreboard", () => {
   const base = { league: "nfl", group: "Den" };
 
-  it("normalises the configured team to its abbreviation", () => {
-    expect(parseConfig({ ...base, team: "giants" }).team).toBe("NYG");
-    expect(parseConfig({ ...base, team: "WAS" }).team).toBe("WSH");
-    expect(parseConfig({ ...base, team: "San Francisco 49ers" }).team).toBe("SF");
-    expect(parseConfig({ ...base, league: "football/nfl", team: "bucs" }).team).toBe("TB");
+  it("normalises configured teams to abbreviations", () => {
+    expect(parseConfig({ ...base, teams: ["giants", "WAS", "San Francisco 49ers"] }).teams).toEqual(["NYG", "WSH", "SF"]);
+    expect(parseConfig({ ...base, teams: ["Bucs", "TB", "tampa"] }).teams).toEqual(["TB"]);
+    expect(parseConfig({ ...base, league: "football/nfl", team: "jets" }).teams).toEqual(["NYJ"]);
+    expect(parseConfig(base).teams).toEqual([]);
   });
 
   it("rejects unknown NFL teams but leaves other leagues alone", () => {
-    expect(() => parseConfig({ ...base, team: "Arsenal" })).toThrow(/not an NFL team/);
-    expect(parseConfig({ ...base, league: "epl", team: "ARS" }).team).toBe("ARS");
+    expect(() => parseConfig({ ...base, teams: ["NYG", "Arsenal"] })).toThrow(/not an NFL team/);
+    expect(parseConfig({ ...base, league: "epl", teams: ["ARS"] }).teams).toEqual(["ARS"]);
   });
 
   it("matches a game when the feed uses another abbreviation", () => {
     const games = parseScoreboard(scoreboard("in", 7, 3, "WAS"), "football/nfl");
     expect(games[0]?.teams[1]?.abbreviation).toBe("WSH");
-    expect(findGame(games, parseConfig({ ...base, team: "Commanders" }).team)?.id).toBe("401");
+    expect(followedGames(games, parseConfig({ ...base, team: "Commanders" }).teams)[0]?.id).toBe("401");
   });
 });
