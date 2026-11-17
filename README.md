@@ -131,6 +131,8 @@ The hosted version runs at [hue-live-sports.tuler.dev](https://hue-live-sports.t
 
 The page is a React + [Mantine](https://mantine.dev) app in [`web/`](web), built by Vite and served by the Worker as static assets. The main screen is kept simple (the game, the room, TV delay, test flash); effects and the flash mode sit under **Advanced**.
 
+Page views are counted with [Cloudflare Web Analytics](https://www.cloudflare.com/web-analytics/), which sets no cookies. Production builds include its beacon when `CF_BEACON_TOKEN` (the site token from the Web Analytics dashboard) is set in the shell or `.env`; without it, and under `web:dev` and Storybook, there is no beacon.
+
 Run it locally with `bun run worker:dev`, and `bun run web:dev` for hot reload of the page. It needs `.dev.vars` (gitignored) with `WEBHOOK_SECRET`, `HUE_CLIENT_ID`, `HUE_CLIENT_SECRET`, `ADMIN_TOKEN` and `SESSION_SECRET`. Hue sends sign-ins back to the callback URL registered for the Hue app (`https://hue-live-sports.tuler.dev/auth/callback`), so signing in only works on the deployed Worker. Admin routes take `Authorization: Bearer $ADMIN_TOKEN`: `GET|PUT|DELETE /users/<id>`, `PUT|DELETE /users/<id>/game` (`{ "league", "key" }`, the key being the two team abbreviations, lowercase and sorted, like `dal-nyg`), `POST /users/<id>/test` and `GET /leagues/<league>`.
 
 ## Development

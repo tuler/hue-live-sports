@@ -92,4 +92,4 @@ Open questions: which licensed score feed to use, Hue Remote API quotas for per-
 ## Workflow
 
 - Work directly on `main`; no pull requests for now.
-- Secrets live in `.env` (`HUE_APP_KEY`, `WEBHOOK_SECRET`); `.env` and `config.json` are gitignored.
+- Secrets live in `.env` (`HUE_APP_KEY`, `WEBHOOK_SECRET`); `.env` and `config.json` are gitignored. `.env` also holds `CF_BEACON_TOKEN`, the Cloudflare Web Analytics site token that `web/vite.config.ts` puts into production builds of the page (not a secret: it ships in the HTML).
