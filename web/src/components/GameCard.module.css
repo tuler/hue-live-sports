@@ -1,0 +1,30 @@
+/* A game card you can tap to follow. */
+.selectable {
+  display: block;
+  width: 100%;
+  text-align: start;
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease,
+    transform 80ms ease;
+}
+
+.selectable:hover:not(:disabled) {
+  border-color: var(--mantine-primary-color-filled);
+  background-color: var(--mantine-color-default-hover);
+}
+
+.selectable:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
+.selectable:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 2px;
+}
+
+.selectable:disabled {
+  cursor: default;
+  opacity: 0.6;
+}

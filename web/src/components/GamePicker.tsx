@@ -51,7 +51,15 @@ export function GamePicker({ leagues, league, onLeague, followed, busy, onFollow
           game={live ?? followed}
           following
           action={
-            <Button variant="default" size="xs" onClick={onStop} loading={busy === "stop"} disabled={Boolean(busy) && busy !== "stop"}>
+            // Compact, and overhanging the status row by 2px each way, so the row is as tall as on every other card.
+            <Button
+              variant="default"
+              size="compact-xs"
+              my={-2}
+              onClick={onStop}
+              loading={busy === "stop"}
+              disabled={Boolean(busy) && busy !== "stop"}
+            >
               Stop
             </Button>
           }
@@ -79,18 +87,9 @@ export function GamePicker({ leagues, league, onLeague, followed, busy, onFollow
         <GameCard
           key={g.key}
           game={g}
-          action={
-            <Button
-              variant="light"
-              size="xs"
-              onClick={() => onFollow(g)}
-              loading={busy === g.key}
-              disabled={Boolean(busy) && busy !== g.key}
-              aria-label={`Follow ${g.away.name} at ${g.home.name}`}
-            >
-              Follow
-            </Button>
-          }
+          onSelect={() => onFollow(g)}
+          selecting={busy === g.key}
+          disabled={Boolean(busy) && busy !== g.key}
         />
       ))}
     </Stack>
