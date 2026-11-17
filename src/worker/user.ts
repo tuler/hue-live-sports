@@ -22,14 +22,6 @@ interface Profile {
   settings: Settings;
 }
 
-/** A sign-in link handed out by an admin, valid once. */
-interface PendingAuth {
-  nonce: string;
-  expiresAt: number;
-}
-
-const AUTH_LINK_MS = 60 * 60 * 1000;
-
 export class User extends DurableObject<Env> {
   private queue?: PlannedEffect[];
   private group?: LightGroup;
@@ -70,8 +62,8 @@ export class User extends DurableObject<Env> {
     else await this.ctx.storage.setAlarm(next);
   }
 
-  /** Saves settings and subscribes to the league. Returns a one-time sign-in link path. */
-  async configure(id: string, raw: unknown): Promise<{ settings: Settings; authPath: string }> {
+  /** Saves settings, subscribes to the league and starts its feeder. */
+  async configure(id: string, raw: unknown): Promise<Settings> {
     const settings = parseSettings(raw);
     const league = resolveLeague(settings.league);
     const old = await this.ctx.storage.get<Profile>("profile");
@@ -82,46 +74,46 @@ export class User extends DurableObject<Env> {
     this.group = undefined;
     await this.env.GAMES.getByName(league).subscribe(id);
     await this.env.FEEDER.getByName(league).start(league);
-    return { settings, authPath: await this.authLink(id) };
+    return settings;
   }
 
-  async authLink(id: string): Promise<string> {
-    const nonce = crypto.randomUUID();
-    await this.ctx.storage.put<PendingAuth>("pendingAuth", { nonce, expiresAt: Date.now() + AUTH_LINK_MS });
-    return `/auth/start?user=${encodeURIComponent(id)}&nonce=${nonce}`;
-  }
-
-  private async checkNonce(nonce: string): Promise<void> {
-    const pending = await this.ctx.storage.get<PendingAuth>("pendingAuth");
-    if (!pending || pending.nonce !== nonce || pending.expiresAt < Date.now()) {
-      throw new Error("This sign-in link has expired or was already used. Ask for a new one.");
-    }
-  }
-
-  /** Where to send the user's browser to grant access. */
-  async authStart(id: string, nonce: string): Promise<string> {
-    await this.checkNonce(nonce);
-    return this.auth().authorizeUrl(`${id}.${nonce}`);
-  }
-
-  /** Finishes sign-in: trades the code for tokens and makes an app key if there is none. */
-  async authCallback(nonce: string, code: string): Promise<LightGroup[]> {
-    await this.checkNonce(nonce);
-    await this.auth().exchangeCode(code);
-    // Only now: if the exchange failed, the same link can be tried again.
-    await this.ctx.storage.delete("pendingAuth");
+  /**
+   * Takes over tokens from a Hue sign-in, and makes an app key on the first
+   * one by pressing the bridge's link button through the cloud.
+   */
+  async adopt(tokens: RemoteTokens): Promise<void> {
+    await this.ctx.storage.put("tokens", tokens);
     if (!(await this.ctx.storage.get<string>("appKey"))) {
       const setup = new HueBridge(remoteTransport(this.auth()));
       await setup.pressLinkButton();
       await this.ctx.storage.put("appKey", await setup.pair("hue-live-sports#cloud"));
     }
-    return (await this.bridge()).groups();
   }
 
   /** For development: hand over tokens made by the CLI's `remote-auth`. The CLI must stop using them. */
   async importTokens(tokens: RemoteTokens, appKey: string): Promise<void> {
     await this.ctx.storage.put("tokens", tokens);
     await this.ctx.storage.put("appKey", appKey);
+  }
+
+  /** What the settings page needs: saved settings, if any. */
+  async me(): Promise<{ settings?: Settings; connected: boolean }> {
+    const profile = await this.ctx.storage.get<Profile>("profile");
+    return { settings: profile?.settings, connected: Boolean(await this.ctx.storage.get<string>("appKey")) };
+  }
+
+  async groups(): Promise<{ name: string; kind: string }[]> {
+    return (await (await this.bridge()).groups()).map((g) => ({ name: g.name, kind: g.kind }));
+  }
+
+  /** Disconnects: leaves the league and forgets everything, tokens included. */
+  async remove(): Promise<void> {
+    const profile = await this.ctx.storage.get<Profile>("profile");
+    if (profile) await this.env.GAMES.getByName(resolveLeague(profile.settings.league)).unsubscribe(profile.id);
+    await this.ctx.storage.deleteAlarm();
+    await this.ctx.storage.deleteAll();
+    this.queue = undefined;
+    this.group = undefined;
   }
 
   /** Queues the effects this user wants for `events`. Called by the league's Games object. */
@@ -161,14 +153,14 @@ export class User extends DurableObject<Env> {
     return this.group;
   }
 
-  /** Plays one effect now in `team`'s colours, to check the whole route. */
-  async test(effectKey: string, team: string): Promise<string> {
+  /** Plays one effect now in a team's colours, to check the whole route. */
+  async test(effectKey: string, team: Pick<TeamSide, "abbreviation" | "color" | "alternateColor">): Promise<string> {
     const { settings } = await this.profile();
     const effect = effectFor(settings, [effectKey]);
     if (!effect) throw new Error(`Effect "${effectKey}" is unknown or disabled.`);
     const league = resolveLeague(settings.league);
-    const abbreviation = league === NFL_LEAGUE ? (findNflTeam(team)?.abbr ?? team) : team;
-    const side = { abbreviation } as TeamSide;
+    const abbreviation = league === NFL_LEAGUE ? (findNflTeam(team.abbreviation)?.abbr ?? team.abbreviation) : team.abbreviation;
+    const side = { ...team, abbreviation } as TeamSide;
     const group = await this.lightGroup(settings);
     await play({ bridge: await this.bridge(), group }, settings.effectMode, effect, colorsFor(side, effect, league));
     return `Played "${effectKey}" on ${group.name} for ${effect.seconds}s`;

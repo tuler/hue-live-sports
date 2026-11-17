@@ -115,24 +115,19 @@ Because the colours are built in, `test` works for any NFL team whether or not i
 - **The Remote API adds a round trip through Hue's cloud** and has rate limits that are not yet measured.
 - **The bridge certificate is not verified by default**, since it is issued by Signify's private CA for the bridge id rather than its IP. To verify it, set `HUE_CA_FILE` to the Hue root CA and `HUE_BRIDGE_ID` to the bridge id.
 
-## Cloudflare Worker (in progress)
+## Cloudflare Worker
 
-[`src/worker`](src/worker) runs the same pipeline as a hosted service, with no bridge on the local network:
+The hosted version runs at [hue-live-sports.tuler.dev](https://hue-live-sports.tuler.dev). Anyone with a Hue Bridge can open it, press **Connect Hue**, sign in on Philips Hue's own site, and then pick a room, a league, teams (or every team), a TV delay and effects. There are no accounts: the bridge is the account, and a signed cookie keeps you signed in for 30 days.
+
+[`src/worker`](src/worker) runs the same pipeline as the local service, with no bridge on the local network:
 
 - **Games** (a Durable Object per league) holds the shared tracker behind the webhook receiver at `POST /webhook/<league>`. Game state is the same for everyone.
-- **Feeder** (one per league) polls ESPN on an alarm, every 10 s while a game is live, and posts the board to that receiver, signed, like any other score source.
-- **User** (one per person) keeps that person's settings and Hue Remote API tokens. It filters events to their teams, holds each effect for their TV delay, and plays it from an alarm.
+- **Feeder** (one per league) polls ESPN on an alarm, every 10 s while a game is live, and posts the board to that receiver, signed, like any other score source. It stops when a league has no users.
+- **User** (one per bridge) keeps that bridge's settings and Hue Remote API tokens. It filters events to the chosen teams, holds each effect for the TV delay, and plays it from an alarm.
 
-Run it locally:
+The page is a React + [Mantine](https://mantine.dev) app in [`web/`](web), built by Vite and served by the Worker as static assets. The main screen is kept simple (room, league and teams, TV delay, test flash); effects and the flash mode sit under **Advanced**.
 
-```sh
-# .dev.vars (gitignored): WEBHOOK_SECRET, HUE_CLIENT_ID, HUE_CLIENT_SECRET, ADMIN_TOKEN
-bun run worker:dev
-curl -X PUT localhost:8787/users/me -H "authorization: Bearer $ADMIN_TOKEN" \
-  -d '{"league":"nfl","teams":["LAC"],"group":"Living Room","delaySeconds":0}'
-```
-
-The reply has a one-time `authLink` that signs the user in to Hue. For it to work, the Hue app's callback URL must be `<worker>/auth/callback`. Admin routes (`Authorization: Bearer $ADMIN_TOKEN`): `GET /users/<id>`, `POST /users/<id>/test` with `{"effect":"touchdown","team":"LAC"}`, `POST /users/<id>/auth-link`, and `GET /leagues/<league>`.
+Run it locally with `bun run worker:dev`, and `bun run web:dev` for hot reload of the page. It needs `.dev.vars` (gitignored) with `WEBHOOK_SECRET`, `HUE_CLIENT_ID`, `HUE_CLIENT_SECRET`, `ADMIN_TOKEN` and `SESSION_SECRET`. Hue sends sign-ins back to the callback URL registered for the Hue app (`https://hue-live-sports.tuler.dev/auth/callback`), so signing in only works on the deployed Worker. Admin routes take `Authorization: Bearer $ADMIN_TOKEN`: `GET|PUT|DELETE /users/<id>`, `POST /users/<id>/test` and `GET /leagues/<league>`.
 
 ## Development
 

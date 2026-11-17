@@ -64,6 +64,10 @@ export class Games extends DurableObject<Env> {
     await this.ctx.storage.put("subscribers", users.filter((u) => u !== userId));
   }
 
+  async hasSubscribers(): Promise<boolean> {
+    return (await this.subscribers()).length > 0;
+  }
+
   async status() {
     const tracker = await this.load();
     return {

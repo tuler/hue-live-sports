@@ -13,6 +13,8 @@ export interface Env {
   WEBHOOK_SECRET: string;
   HUE_CLIENT_ID: string;
   HUE_CLIENT_SECRET: string;
-  /** Bearer token for the /users admin routes. */
+  /** Bearer token for the /users and /leagues admin routes. */
   ADMIN_TOKEN: string;
+  /** Signs session and OAuth-state cookies. */
+  SESSION_SECRET: string;
 }

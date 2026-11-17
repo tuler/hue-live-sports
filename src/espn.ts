@@ -50,6 +50,24 @@ export const LEAGUES: Record<string, string> = {
   ucl: "soccer/uefa.champions",
 };
 
+/** Display names for the aliases in `LEAGUES`. */
+export const LEAGUE_NAMES: Record<string, string> = {
+  nfl: "NFL",
+  ncaaf: "College football",
+  nba: "NBA",
+  wnba: "WNBA",
+  nhl: "NHL",
+  mlb: "MLB",
+  mls: "MLS",
+  epl: "Premier League",
+  laliga: "LaLiga",
+  bundesliga: "Bundesliga",
+  seriea: "Serie A",
+  ligue1: "Ligue 1",
+  brasileirao: "Brasileirão",
+  ucl: "Champions League",
+};
+
 /** Accepts an alias ("nfl") or a raw ESPN path ("soccer/eng.1"). */
 export function resolveLeague(league: string): string {
   const key = league.trim().toLowerCase();
@@ -168,4 +186,30 @@ export const isAnyTeam = (side: TeamSide, teams: readonly string[]): boolean =>
 export function followedGames(games: GameSnapshot[], teams: readonly string[]): GameSnapshot[] {
   if (teams.length === 0) return games;
   return games.filter((g) => g.teams.some((t) => isAnyTeam(t, teams)));
+}
+
+export interface LeagueTeam {
+  abbreviation: string;
+  name: string;
+  /** Hex without "#", as ESPN reports it. */
+  color?: string;
+  alternateColor?: string;
+}
+
+/** Every team in a league, from ESPN's teams list. Malformed entries are skipped. */
+export async function fetchTeams(leaguePath: string, fetchImpl: typeof fetch = fetch): Promise<LeagueTeam[]> {
+  const res = await fetchImpl(`https://site.api.espn.com/apis/site/v2/sports/${leaguePath}/teams?limit=500`, {
+    headers: { accept: "application/json", "user-agent": USER_AGENT },
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) throw new Error(`ESPN teams list returned HTTP ${res.status}`);
+  const data = (await res.json()) as { sports?: { leagues?: { teams?: { team?: Record<string, unknown> }[] }[] }[] };
+  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+  const teams = (data.sports?.[0]?.leagues?.[0]?.teams ?? []).flatMap(({ team }) => {
+    const abbreviation = str(team?.abbreviation);
+    const name = str(team?.displayName);
+    if (!abbreviation || !name) return [];
+    return [{ abbreviation: canonicalAbbreviation(leaguePath, abbreviation), name, color: str(team?.color), alternateColor: str(team?.alternateColor) }];
+  });
+  return teams.sort((a, b) => a.name.localeCompare(b.name));
 }

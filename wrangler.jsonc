@@ -6,6 +6,13 @@
   "observability": { "enabled": true },
   "workers_dev": true,
   "routes": [{ "pattern": "hue-live-sports.tuler.dev", "custom_domain": true }],
+  // The settings page (web/) is built first and served as static assets; these paths go to the Worker.
+  "build": { "command": "bun run build:web" },
+  "assets": {
+    "directory": "./dist/web",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/auth/*", "/webhook/*", "/users/*", "/leagues/*"]
+  },
   "preview_urls": false,
   "durable_objects": {
     "bindings": [

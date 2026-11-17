@@ -40,6 +40,8 @@ export class Feeder extends DurableObject<Env> {
   override async alarm(): Promise<void> {
     const state = await this.state();
     if (!state) return;
+    // Nobody left in this league: stop until a user's `configure` starts it again.
+    if (!(await this.env.GAMES.getByName(state.league).hasSubscribers())) return;
     let wait = RETRY_SECONDS;
     try {
       const games = await fetchScoreboard(state.league);

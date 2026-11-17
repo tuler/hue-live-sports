@@ -37,14 +37,14 @@ export class WebhookError extends Error {}
 
 const utf8 = new TextEncoder();
 
-async function hmac(secret: string, text: string): Promise<string> {
+export async function hmac(secret: string, text: string): Promise<string> {
   const key = await crypto.subtle.importKey("raw", utf8.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const mac = new Uint8Array(await crypto.subtle.sign("HMAC", key, utf8.encode(text)));
   return [...mac].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 /** Compares in time that depends only on the length, to not leak the signature. */
-function sameText(a: string, b: string): boolean {
+export function sameText(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let diff = 0;
   for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
