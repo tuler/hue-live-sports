@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HueBridge } from "../src/hue.ts";
+import { localTransport, type LocalBridgeOptions } from "../src/hue-local.ts";
 
 /**
  * A stand-in bridge: HTTPS with a self-signed certificate whose common name
@@ -81,11 +82,13 @@ afterAll(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
+const local = (options: LocalBridgeOptions) => new HueBridge(localTransport(options));
+
 describe.skipIf(!minted)("HueBridge", () => {
-  const bridge = () => new HueBridge({ ip, appKey: "app-key-1" });
+  const bridge = () => local({ ip, appKey: "app-key-1" });
 
   it("pairs only after the link button is pressed", async () => {
-    const fresh = new HueBridge({ ip });
+    const fresh = local({ ip });
     await expect(fresh.pair()).rejects.toThrow(/Link button not pressed/);
     linkPressed = true;
     expect(await fresh.pair()).toBe("app-key-1");
@@ -101,7 +104,7 @@ describe.skipIf(!minted)("HueBridge", () => {
   });
 
   it("reports HTTP errors from the bridge", async () => {
-    await expect(new HueBridge({ ip, appKey: "wrong" }).groups()).rejects.toThrow(/HTTP 403/);
+    await expect(local({ ip, appKey: "wrong" }).groups()).rejects.toThrow(/HTTP 403/);
   });
 
   it("sends a signaling command", async () => {
@@ -133,9 +136,9 @@ describe.skipIf(!minted)("HueBridge", () => {
   });
 
   it("verifies the certificate against a CA file and the bridge id", async () => {
-    const verified = new HueBridge({ ip, appKey: "app-key-1", caFile: certFile, bridgeId: BRIDGE_ID.toUpperCase() });
+    const verified = local({ ip, appKey: "app-key-1", caFile: certFile, bridgeId: BRIDGE_ID.toUpperCase() });
     expect(await verified.groups()).toHaveLength(2);
-    const wrongId = new HueBridge({ ip, appKey: "app-key-1", caFile: certFile, bridgeId: "ffffffffffffffff" });
+    const wrongId = local({ ip, appKey: "app-key-1", caFile: certFile, bridgeId: "ffffffffffffffff" });
     await expect(wrongId.groups()).rejects.toThrow();
   });
 });

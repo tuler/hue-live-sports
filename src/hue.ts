@@ -1,18 +1,18 @@
 /**
- * Minimal client for the Hue Bridge local API (CLIP v2).
+ * Minimal client for the Hue CLIP v2 API.
  * https://developers.meethue.com/develop/hue-api-v2/
+ *
+ * The same calls work on the bridge's local API and through Hue's Remote API;
+ * a `HueTransport` (`hue-local.ts`, `hue-remote.ts`) says how requests get
+ * there. This file uses only `fetch`-era globals so it can run in a Worker.
  */
-import { readFileSync } from "node:fs";
-import { setTimeout as sleep } from "node:timers/promises";
 import type { XY } from "./color.ts";
 
-export interface BridgeOptions {
-  ip: string;
-  appKey?: string;
-  /** PEM file with the Hue root CA. Without it the bridge certificate is not verified. */
-  caFile?: string;
-  /** Bridge id, checked against the certificate's common name when `caFile` is set. */
-  bridgeId?: string;
+/** Sends one request to the bridge, by whatever route. */
+export interface HueTransport {
+  /** Names the route in error messages, e.g. "Hue bridge". */
+  readonly label: string;
+  send(method: string, path: string, body?: string): Promise<Response>;
 }
 
 export interface LightGroup {
@@ -25,6 +25,10 @@ export interface LightGroup {
 }
 
 export type Signal = "on_off_color" | "alternating";
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+type V1Reply = { success?: Record<string, unknown>; error?: { type: number; description: string } }[];
 
 interface LightState {
   id: string;
@@ -44,38 +48,14 @@ interface Resource {
 }
 
 export class HueBridge {
-  private readonly tls: NonNullable<BunFetchRequestInit["tls"]>;
-
-  constructor(private readonly options: BridgeOptions) {
-    // The bridge serves a certificate issued by Signify's private CA for its
-    // bridge id, not its IP, so the default verification cannot pass.
-    const { caFile, bridgeId } = options;
-    this.tls = caFile
-      ? {
-          ca: readFileSync(caFile, "utf8"),
-          checkServerIdentity: (_host, cert) => {
-            const cn = String(cert.subject.CN ?? "");
-            return !bridgeId || cn.toLowerCase() === bridgeId.toLowerCase()
-              ? undefined
-              : new Error(`Bridge certificate is for "${cn}", expected ${bridgeId}`);
-          },
-        }
-      : { rejectUnauthorized: false };
-  }
+  constructor(private readonly transport: HueTransport) {}
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const res = await fetch(`https://${this.options.ip}${path}`, {
-      method,
-      tls: this.tls,
-      signal: AbortSignal.timeout(8_000),
-      headers: {
-        "content-type": "application/json",
-        ...(this.options.appKey ? { "hue-application-key": this.options.appKey } : {}),
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
+    const res = await this.transport.send(method, path, body === undefined ? undefined : JSON.stringify(body));
     const text = await res.text();
-    if (!res.ok) throw new Error(`Hue bridge ${method} ${path}: HTTP ${res.status} ${text.slice(0, 300)}`);
+    if (!res.ok) {
+      throw new Error(`${this.transport.label} ${method} ${path}: HTTP ${res.status} ${text.slice(0, 300)}`);
+    }
     return JSON.parse(text) as T;
   }
 
@@ -83,17 +63,28 @@ export class HueBridge {
     return (await this.request<{ data: Resource[] }>("GET", `/clip/v2/resource/${type}`)).data;
   }
 
-  /** Creates an app key. The bridge's link button must have been pressed in the last 30 s. */
+  /**
+   * Creates an app key. The bridge's link button must have been pressed in the
+   * last 30 s, physically or with `pressLinkButton` through the Remote API.
+   */
   async pair(deviceType = "hue-live-sports#cli"): Promise<string> {
-    const reply = await this.request<
-      { success?: { username: string }; error?: { type: number; description: string } }[]
-    >("POST", "/api", { devicetype: deviceType, generateclientkey: true });
+    const reply = await this.request<V1Reply>("POST", "/api", { devicetype: deviceType, generateclientkey: true });
     const first = reply[0];
-    if (first?.success) return first.success.username;
+    const username = first?.success?.username;
+    if (typeof username === "string") return username;
     if (first?.error?.type === 101) {
       throw new Error("Link button not pressed. Press the button on the bridge, then run pair again within 30 seconds.");
     }
     throw new Error(`Pairing failed: ${first?.error?.description ?? JSON.stringify(reply)}`);
+  }
+
+  /**
+   * Presses the link button virtually. Only the Remote API accepts this, since
+   * the OAuth grant already proves the user owns the bridge.
+   */
+  async pressLinkButton(): Promise<void> {
+    const reply = await this.request<V1Reply>("PUT", "/api/0/config", { linkbutton: true });
+    if (!reply[0]?.success) throw new Error(`Could not press the link button: ${JSON.stringify(reply)}`);
   }
 
   async groups(): Promise<LightGroup[]> {

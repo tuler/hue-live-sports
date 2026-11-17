@@ -8,7 +8,7 @@ Flashes Philips Hue lights on live sports events. A Bun + TypeScript CLI that le
 bun install
 bun run typecheck      # tsc --noEmit
 bun test               # all tests; Hue client tests need `openssl`, skipped without it
-bun start <command>    # discover | pair | groups | games | teams | test | emit | run
+bun start <command>    # discover | pair | remote-auth | groups | games | teams | test | emit | run (bridge commands take --remote)
 bun run compile        # standalone binary at dist/hue-live-sports
 ```
 
@@ -25,7 +25,10 @@ Data flows one way: sources -> tracker -> events -> dispatcher -> bridge.
 | `src/tracker.ts` | Last known state of every followed game; merges sources so each play fires once |
 | `src/events.ts` | `detectEvents` diffs two snapshots of a game; `eventKeys` maps an event to config keys |
 | `src/runner.ts` | Wires sources to the tracker; the dispatcher queues effects and picks colours |
-| `src/hue.ts` | Bridge client: pairing, rooms/zones, `signal` (bridge-run flash) and `pulse` (manual flash + restore) |
+| `src/hue.ts` | Bridge client over a `HueTransport`: pairing, rooms/zones, `signal` (bridge-run flash) and `pulse` (manual flash + restore) |
+| `src/hue-local.ts` | LAN transport (Bun `tls`, self-signed bridge certificate) |
+| `src/hue-remote.ts` | Hue Remote API: OAuth tokens (`HueRemoteAuth`, pluggable `TokenStore`) and the `/route` transport |
+| `src/token-file.ts` | CLI's `TokenStore`: `.hue-tokens.json` |
 | `src/espn.ts` | The only file that knows ESPN's response shape; defines `GameSnapshot` |
 | `src/nfl.ts` | The 32 NFL teams, aliases and lamp colours |
 | `src/config.ts` | Config parsing, validation and default effects |
@@ -41,6 +44,8 @@ Data flows one way: sources -> tracker -> events -> dispatcher -> bridge.
 - **Effect sides:** `us`/`them` exist only in a followed team's game; with no `teams` configured every score is `any`.
 - **NFL colours in `src/nfl.ts` are lamp colours, not brand colours** (black dropped, silver as white, some shades saturated). They were chosen without seeing real bulbs.
 - **`createWebhookHandler` must stay a plain `Request -> Response` function** with no Bun-specific calls, so it can run as a Cloudflare Worker.
+- **`hue.ts` and `hue-remote.ts` must stay Worker-safe** (only `fetch` and Web globals). Bun and Node calls go in `hue-local.ts` or `token-file.ts`.
+- **Remote refresh tokens are single use.** `HueRemoteAuth.refresh` shares one in-flight refresh between callers; a Worker version needs the same guarantee across requests (one Durable Object per user).
 - **The bridge certificate is self-signed for the bridge id.** Verification is off unless `HUE_CA_FILE` is set; keep that scoped to bridge requests.
 
 ## Verified against the real world
@@ -51,6 +56,8 @@ Phase one (the local service) has run end to end against live systems:
 - **The Hue client** has flashed real lights through a real bridge in the default `"effectMode": "signal"`. A live Chargers score showed their blue.
 
 Still unverified:
+
+- **The Hue Remote API client** was written from Q42.HueApi and node-hue-api source (Hue's own docs need a developer login). `remote-auth`, `groups --remote` and `test --remote` work against the real service: the token endpoint takes basic auth, the local app key is accepted remotely, and signaling through `/route` flashed real lights with no delay noticeable next to the LAN. Unknowns: token refresh against the real service and rate limits.
 
 - **No provider webhook adapter exists.** Write one from real sample payloads and headers, not from documentation summaries.
 - **NFL lamp colours** other than LAC's have not been reviewed on real bulbs.

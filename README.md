@@ -25,6 +25,15 @@ bun start run             # add --dry-run to log events without touching the lig
 
 Bun runs the TypeScript directly and loads `.env` itself, so there is no build step. `bun run compile` produces a standalone binary at `dist/hue-live-sports` for a machine without Bun.
 
+### Through the Hue Remote API
+
+The bridge can also be reached through Hue's cloud instead of the LAN, which is how a hosted version would talk to it. Add `--remote` to `pair`, `groups`, `test` or `run`.
+
+1. Create a Remote Hue API app at [developers.meethue.com](https://developers.meethue.com). Any callback URL works for the CLI; the page it lands on does not need to load.
+2. Put the app's client id and secret in `.env` as `HUE_CLIENT_ID` and `HUE_CLIENT_SECRET`.
+3. Run `bun start remote-auth`, open the link it prints, allow access, and paste back the address the browser ends up on. Tokens are saved to `.hue-tokens.json` (gitignored) and refreshed automatically.
+4. Run `bun start groups --remote`. The app key from `pair` should work here too. If it is refused, run `bun start pair --remote`, which presses the link button through the cloud and creates a new key.
+
 ## Config
 
 | Key | Default | Meaning |
@@ -108,6 +117,7 @@ Because the colours are built in, `test` works for any NFL team whether or not i
 - **ESPN's scoreboard is undocumented** and can change or lag without notice. `src/espn.ts` is the only file that knows its shape.
 - **Two games between the same teams on one scoreboard**, such as a baseball doubleheader, are read as one game.
 - **Events are inferred from the score.** Two football points could be a conversion or a safety, and a touchdown plus its extra point inside one poll reads as a single 7-point touchdown. Cards, penalties and other non-scoring plays are not detected.
+- **The Remote API adds a round trip through Hue's cloud** and has rate limits that are not yet measured.
 - **The bridge certificate is not verified by default**, since it is issued by Signify's private CA for the bridge id rather than its IP. To verify it, set `HUE_CA_FILE` to the Hue root CA and `HUE_BRIDGE_ID` to the bridge id.
 
 ## Development
@@ -117,4 +127,4 @@ bun run typecheck
 bun test
 ```
 
-The Hue client tests start a local HTTPS stand-in for the bridge and need `openssl` to mint its certificate; they are skipped without it.
+The Remote API tests use an in-memory stand-in for `api.meethue.com`. The local Hue client tests start a local HTTPS stand-in for the bridge and need `openssl` to mint its certificate; they are skipped without it.
