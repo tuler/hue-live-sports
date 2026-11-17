@@ -43,13 +43,17 @@ Data flows one way: sources -> tracker -> events -> dispatcher -> bridge.
 - **`createWebhookHandler` must stay a plain `Request -> Response` function** with no Bun-specific calls, so it can run as a Cloudflare Worker.
 - **The bridge certificate is self-signed for the bridge id.** Verification is off unless `HUE_CA_FILE` is set; keep that scoped to bridge requests.
 
-## Not yet verified against the real world
+## Verified against the real world
 
-Everything is unit tested, but as of the last commit none of it has run against live systems:
+Phase one (the local service) has run end to end against live systems:
 
-- **ESPN parsing** was written from memory of the feed's shape. `bun start games` on a game day is the first real check.
-- **The Hue client** has only talked to the fake bridge in `test/hue.test.ts`. Check `pair`, `groups` and `test any.touchdown KC` against a real bridge; if signaling does nothing, try `"effectMode": "pulse"`.
+- **ESPN parsing** works on the live NFL scoreboard. ESPN's Akamai edge returns 403 to Bun's default User-Agent, so `fetchScoreboard` sends its own; keep it.
+- **The Hue client** has flashed real lights through a real bridge in the default `"effectMode": "signal"`. A live Chargers score showed their blue.
+
+Still unverified:
+
 - **No provider webhook adapter exists.** Write one from real sample payloads and headers, not from documentation summaries.
+- **NFL lamp colours** other than LAC's have not been reviewed on real bulbs.
 
 ## Direction
 
