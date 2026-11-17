@@ -1,7 +1,7 @@
 /** The settings most people never touch: how the bridge flashes, and each effect. */
 import { Group, NumberInput, Radio, SegmentedControl, Stack, Switch, Text } from "@mantine/core";
-import type { Effect, Settings } from "./api.ts";
-import { effectKeysFor, LABELS } from "./effects.ts";
+import type { Effect, Settings } from "../api.ts";
+import { effectKeysFor, LABELS } from "../effects.ts";
 
 interface Props {
   settings: Settings;

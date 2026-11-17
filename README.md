@@ -132,8 +132,11 @@ Run it locally with `bun run worker:dev`, and `bun run web:dev` for hot reload o
 ## Development
 
 ```sh
-bun run typecheck   # the CLI with Bun's types, then the Worker with Cloudflare's
+bun run typecheck   # the CLI (Bun types), the Worker (Cloudflare types), the page (DOM types)
 bun test
+bun run storybook   # the settings page's components on :6006
 ```
+
+Storybook shows every part of the settings page, in light and dark and at phone width, against a fake `/api`. That means states that are hard to reach for real, like an unreachable bridge or a failed save, can be seen without a server.
 
 The Remote API tests use an in-memory stand-in for `api.meethue.com`. The local Hue client tests start a local HTTPS stand-in for the bridge and need `openssl` to mint its certificate; they are skipped without it.

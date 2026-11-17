@@ -12,6 +12,7 @@ bun start <command>    # discover | pair | remote-auth | groups | games | teams 
 bun run compile        # standalone binary at dist/hue-live-sports
 bun run worker:dev     # the Worker locally (needs .dev.vars); builds web/ first. worker:deploy publishes both
 bun run web:dev        # the settings page with hot reload, proxying /api and /auth to worker:dev on :8787
+bun run storybook      # every UI component and screen on :6006, against a fake /api (web/src/stories/fakeApi.ts)
 ```
 
 Run `bun run typecheck` and `bun test` before committing. The CLI has no build step: Bun runs the TypeScript directly and loads `.env` itself. Only `web/` is built (Vite), and wrangler runs that build before `dev` and `deploy`.
@@ -33,6 +34,7 @@ Data flows one way: sources -> tracker -> events -> dispatcher -> bridge.
 | `src/worker/` | Cloudflare Worker: `Games` (shared tracker + receiver, per league), `Feeder` (ESPN alarm, per league), `User` (settings, Hue tokens, delayed effect queue) |
 | `src/worker/index.ts` | Routes: settings page, Hue sign-in, session `/api`, admin routes, webhook |
 | `web/` | The settings page: React + Mantine, built by Vite to `dist/web` and served as Worker static assets. Simple screen first; effects and flash mode live under "Advanced" |
+| `web/src/components/` | One file per component, each with a `.stories.tsx`. Stories get a fake `/api` from `.storybook/preview.tsx`; a story overrides routes with `parameters.api` |
 | `src/worker/session.ts` | Signed session and OAuth-state cookies |
 | `src/hue.ts` | Bridge client over a `HueTransport`: pairing, rooms/zones, `signal` (bridge-run flash) and `pulse` (manual flash + restore) |
 | `src/hue-local.ts` | LAN transport (Bun `tls`, self-signed bridge certificate) |

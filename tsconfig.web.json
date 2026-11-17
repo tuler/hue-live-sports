@@ -5,6 +5,6 @@
     "jsx": "react-jsx",
     "types": ["vite/client"]
   },
-  "include": ["web/src"],
+  "include": ["web/src", ".storybook"],
   "exclude": []
 }
