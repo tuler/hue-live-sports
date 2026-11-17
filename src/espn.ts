@@ -4,6 +4,8 @@
  * anything unexpected is skipped rather than thrown.
  */
 
+import { findNflTeam, NFL_LEAGUE } from "./nfl.ts";
+
 export type GameState = "pre" | "in" | "post";
 export type Sport = "football" | "soccer" | "hockey" | "baseball" | "basketball" | "other";
 
@@ -90,12 +92,14 @@ function parseScore(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-function parseTeam(v: unknown): TeamSide | undefined {
+function parseTeam(v: unknown, leaguePath: string): TeamSide | undefined {
   const c = obj(v);
   const team = obj(c?.team);
   const id = str(team?.id) ?? str(c?.id);
-  const abbreviation = str(team?.abbreviation);
-  if (!c || !team || !id || !abbreviation) return undefined;
+  const raw = str(team?.abbreviation);
+  if (!c || !team || !id || !raw) return undefined;
+  // Pin NFL teams to the table's abbreviation, so "WAS" and "WSH" are one team.
+  const abbreviation = (leaguePath === NFL_LEAGUE && findNflTeam(raw)?.abbr) || raw;
   return {
     id,
     abbreviation,
@@ -116,7 +120,7 @@ export function parseScoreboard(json: unknown, leaguePath: string): GameSnapshot
     const id = str(event?.id);
     if (!event || !competition || !id) continue;
     const teams = arr(competition.competitors)
-      .map(parseTeam)
+      .map((c) => parseTeam(c, leaguePath))
       .filter((t): t is TeamSide => t !== undefined);
     if (teams.length !== 2) continue;
     const type = obj(obj(competition.status ?? event.status)?.type);

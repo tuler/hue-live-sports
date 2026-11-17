@@ -1,10 +1,11 @@
 import { setTimeout as sleep } from "node:timers/promises";
-import { lampColors } from "./color.ts";
+import { lampColors, toLamp } from "./color.ts";
 import { effectFor, type Config, type Effect } from "./config.ts";
-import { fetchScoreboard, findGame, isTeam, resolveLeague, type GameSnapshot } from "./espn.ts";
+import { fetchScoreboard, findGame, isTeam, resolveLeague, type GameSnapshot, type TeamSide } from "./espn.ts";
 import { describe, detectEvents, eventKeys, type SportsEvent } from "./events.ts";
 import type { HueBridge, LightGroup } from "./hue.ts";
 import type { XY } from "./color.ts";
+import { findNflTeam, NFL_LEAGUE } from "./nfl.ts";
 
 export interface Lights {
   bridge: HueBridge;
@@ -13,12 +14,24 @@ export interface Lights {
 
 const log = (msg: string) => console.log(`${new Date().toLocaleTimeString()}  ${msg}`);
 
+/**
+ * A team's lamp colours: the built-in table for NFL teams, else whatever the
+ * scoreboard reports, else white.
+ */
+export function teamColors(
+  league: string,
+  side: Pick<TeamSide, "abbreviation" | "color" | "alternateColor"> | undefined,
+): XY[] {
+  const nfl = league === NFL_LEAGUE && side ? findNflTeam(side.abbreviation) : undefined;
+  return nfl ? toLamp(nfl.colors) : lampColors(side?.color, side?.alternateColor);
+}
+
 /** Colours for an event: the effect's override, else the relevant team's own. */
-export function colorsFor(event: SportsEvent, effect: Effect, team: string): XY[] {
-  if (effect.colors?.length) return lampColors(...effect.colors);
+export function colorsFor(event: SportsEvent, effect: Effect, team: string, league: string): XY[] {
+  if (effect.colors?.length) return toLamp(effect.colors);
   const side =
     event.type === "score" ? event.team : event.game.teams.find((t) => isTeam(t, team));
-  return lampColors(side?.color, side?.alternateColor);
+  return teamColors(league, side);
 }
 
 export async function play(lights: Lights, config: Config, effect: Effect, colors: XY[]): Promise<void> {
@@ -53,7 +66,7 @@ export async function run(config: Config, lights: Lights | undefined, signal: Ab
         log(describe(event));
         const effect = effectFor(config, eventKeys(event));
         if (!effect || !lights) continue;
-        const colors = colorsFor(event, effect, config.team);
+        const colors = colorsFor(event, effect, config.team, league);
         queue = queue
           .then(() => sleep(config.delaySeconds * 1000))
           .then(() => play(lights, config, effect, colors))

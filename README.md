@@ -18,6 +18,7 @@ bun start pair            # press the bridge's link button first, then put the k
 bun start groups          # room and zone names for config.json
 bun start game            # check that your team's game is found
 bun start test us.touchdown
+bun start test them.score DAL   # try another team's colours
 bun start run             # add --dry-run to log events without touching the lights
 ```
 
@@ -28,7 +29,7 @@ Bun runs the TypeScript directly and loads `.env` itself, so there is no build s
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `league` | | `nfl`, `ncaaf`, `nba`, `wnba`, `nhl`, `mlb`, `mls`, `epl`, `laliga`, `bundesliga`, `seriea`, `ligue1`, `brasileirao`, `ucl`, or any ESPN path such as `soccer/ned.1` |
-| `team` | | ESPN abbreviation (`NYG`) or full name |
+| `team` | | NFL: any of the 32 teams by abbreviation, nickname or full name (`NYG`, `Giants`). Other leagues: ESPN abbreviation or full name |
 | `group` | | Hue room or zone to flash |
 | `pollSeconds` | `10` | Poll interval while the game is live (minimum 5) |
 | `delaySeconds` | `0` | Hold effects back to match a delayed TV stream |
@@ -38,6 +39,12 @@ Bun runs the TypeScript directly and loads `.env` itself, so there is no build s
 Each effect is `{ "enabled", "seconds", "signal", "colors" }`. `signal` is `alternating` (two colours) or `on_off_color` (one). `colors` is an optional list of hex colours that replaces the team's own.
 
 Effect keys are `us.<kind>` and `them.<kind>`, falling back to `us.score` and `them.score`, plus `game_start`, `win`, `loss` and `draw`. Kinds: `touchdown`, `field_goal`, `two_points`, `extra_point`, `goal`, `run`, `basket`, `score`. Defaults are in [`src/config.ts`](src/config.ts); baskets and losses are off.
+
+## NFL teams
+
+All 32 teams are built in (`bun start teams` lists them), each with one or two lamp colours in [`src/nfl.ts`](src/nfl.ts). These start from the team's palette but are tuned for bulbs: black is dropped, silver becomes white, and a few dark shades are more saturated. To change one, edit the table or set `colors` on an effect.
+
+Because the colours are built in, `test` works for any NFL team whether or not it is playing. Other leagues take colours from the scoreboard, so `test` only knows them on a game day.
 
 ## Limits
 

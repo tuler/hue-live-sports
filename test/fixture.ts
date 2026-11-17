@@ -1,5 +1,5 @@
 /** Hand-built in the shape of ESPN's scoreboard response, trimmed to the fields the parser reads. */
-export function scoreboard(state: "pre" | "in" | "post", home: number, away: number) {
+export function scoreboard(state: "pre" | "in" | "post", home: number, away: number, awayAbbr = "DAL") {
   return {
     events: [
       {
@@ -17,7 +17,7 @@ export function scoreboard(state: "pre" | "in" | "post", home: number, away: num
               {
                 homeAway: "away",
                 score: String(away),
-                team: { id: "6", abbreviation: "DAL", displayName: "Dallas Cowboys", color: "002a5c", alternateColor: "b0b7bc" },
+                team: { id: "6", abbreviation: awayAbbr, displayName: "Dallas Cowboys", color: "002a5c", alternateColor: "b0b7bc" },
               },
             ],
           },

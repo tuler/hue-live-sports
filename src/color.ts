@@ -45,9 +45,17 @@ export function isTooDark(hex: string): boolean {
  * so dark entries are dropped and the other colour is used alone.
  */
 export function lampColors(...hexes: (string | undefined)[]): XY[] {
-  const usable = hexes.filter((h): h is string => !!h && !isTooDark(h)).map(hexToXy);
-  const unique = usable.filter(
-    (c, i) => usable.findIndex((o) => Math.abs(o.x - c.x) < 0.01 && Math.abs(o.y - c.y) < 0.01) === i,
+  return toLamp(hexes.filter((h): h is string => !!h && !isTooDark(h)));
+}
+
+/**
+ * Convert hand-picked colours as given, keeping at most two distinct ones.
+ * Unlike `lampColors` this trusts the caller: a dark navy stays blue.
+ */
+export function toLamp(hexes: readonly string[]): XY[] {
+  const all = hexes.map(hexToXy);
+  const unique = all.filter(
+    (c, i) => all.findIndex((o) => Math.abs(o.x - c.x) < 0.01 && Math.abs(o.y - c.y) < 0.01) === i,
   );
   return unique.length > 0 ? unique.slice(0, 2) : [WHITE];
 }

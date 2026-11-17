@@ -1,5 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
+import { resolveLeague } from "./espn.ts";
 import type { Signal } from "./hue.ts";
+import { NFL_LEAGUE, requireNflTeam } from "./nfl.ts";
 
 export interface Effect {
   enabled: boolean;
@@ -12,7 +14,11 @@ export interface Effect {
 export interface Config {
   /** Alias ("nfl", "epl") or ESPN path ("soccer/eng.1"). */
   league: string;
-  /** Team abbreviation as ESPN shows it ("NYG"), or its full display name. */
+  /**
+   * Team abbreviation as ESPN shows it, or its full display name. For the NFL
+   * any of the 32 teams by abbreviation, nickname or full name ("Giants"),
+   * stored here as the abbreviation.
+   */
   team: string;
   /** Name of the Hue room or zone to flash. */
   group: string;
@@ -87,9 +93,12 @@ export function parseConfig(raw: unknown): Config {
     effects[key] = merged;
   }
 
+  const league = text("league");
+  const team = text("team");
+
   return {
-    league: text("league"),
-    team: text("team"),
+    league,
+    team: resolveLeague(league) === NFL_LEAGUE ? requireNflTeam(team).abbr : team,
     group: text("group"),
     // ESPN refreshes no faster than every few seconds; polling harder gains nothing.
     pollSeconds: seconds("pollSeconds", 10, 5),
