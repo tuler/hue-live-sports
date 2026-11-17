@@ -14,7 +14,7 @@ import { run } from "./runner.ts";
 import { signGeneric } from "./sources/webhook.ts";
 import { DEFAULT_TOKEN_FILE, fileTokenStore } from "./token-file.ts";
 
-const USAGE = `hue-live-sports <command> [options]
+const USAGE = `scorelights <command> [options]
 
 Commands
   discover          Find Hue bridges on this network
@@ -112,7 +112,7 @@ async function main(): Promise<void> {
     case "pair": {
       const hue = bridge(flags, false);
       if (flags.remote) await hue.pressLinkButton();
-      const key = await hue.pair(flags.remote ? "hue-live-sports#remote" : undefined);
+      const key = await hue.pair(flags.remote ? "scorelights#remote" : undefined);
       console.log(`Add this to .env:\nHUE_APP_KEY=${key}`);
       return;
     }

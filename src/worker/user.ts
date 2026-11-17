@@ -114,7 +114,7 @@ export class User extends DurableObject<Env> {
     if (!(await this.ctx.storage.get<string>("appKey"))) {
       const setup = new HueBridge(remoteTransport(this.auth()));
       await setup.pressLinkButton();
-      await this.ctx.storage.put("appKey", await setup.pair("hue-live-sports#cloud"));
+      await this.ctx.storage.put("appKey", await setup.pair("scorelights#cloud"));
     }
   }
 

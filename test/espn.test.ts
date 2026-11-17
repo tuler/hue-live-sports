@@ -10,7 +10,7 @@ describe("espn", () => {
       return Response.json(scoreboard("in", 14, 7));
     }) as unknown as typeof fetch;
     await fetchScoreboard("football/nfl", fake);
-    expect(sent?.get("user-agent")).toMatch(/^hue-live-sports\//);
+    expect(sent?.get("user-agent")).toMatch(/^scorelights\//);
   });
 
   it("resolves aliases and raw paths", () => {

@@ -67,7 +67,7 @@ export class HueBridge {
    * Creates an app key. The bridge's link button must have been pressed in the
    * last 30 s, physically or with `pressLinkButton` through the Remote API.
    */
-  async pair(deviceType = "hue-live-sports#cli"): Promise<string> {
+  async pair(deviceType = "scorelights#cli"): Promise<string> {
     const reply = await this.request<V1Reply>("POST", "/api", { devicetype: deviceType, generateclientkey: true });
     const first = reply[0];
     const username = first?.success?.username;

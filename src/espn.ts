@@ -199,7 +199,7 @@ export function parseScoreboard(json: unknown, leaguePath: string): GameSnapshot
  * ESPN's CDN (Akamai) answers 403 to Bun's default User-Agent ("Bun/x.y"),
  * so always send our own.
  */
-export const USER_AGENT = "hue-live-sports/0.1";
+export const USER_AGENT = "scorelights/0.1";
 
 export async function fetchScoreboard(
   leaguePath: string,

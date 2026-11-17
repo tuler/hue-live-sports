@@ -1,11 +1,11 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "hue-live-sports",
+  "name": "scorelights",
   "main": "src/worker/index.ts",
   "compatibility_date": "2026-10-01",
   "observability": { "enabled": true },
   "workers_dev": true,
-  "routes": [{ "pattern": "hue-live-sports.tuler.dev", "custom_domain": true }],
+  "routes": [{ "pattern": "scorelights.app", "custom_domain": true }],
   // The settings page (web/) is built first and served as static assets; these paths go to the Worker.
   "build": { "command": "bun run build:web" },
   "assets": {

@@ -158,7 +158,7 @@ describe("Hue Remote API", () => {
     await auth.exchangeCode("code-1");
     const hue = new HueBridge(transport());
     await hue.pressLinkButton();
-    expect(await hue.pair("hue-live-sports#remote")).toBe("remote-key");
+    expect(await hue.pair("scorelights#remote")).toBe("remote-key");
     expect(calls.slice(-2).map((c) => [c.method, new URL(c.url).pathname])).toEqual([
       ["PUT", "/route/api/0/config"],
       ["POST", "/route/api"],

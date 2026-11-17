@@ -1,6 +1,6 @@
-# hue-live-sports
+# Scorelights
 
-Flash Philips Hue lights on live sports: touchdowns, field goals, goals, runs, kickoff and the final whistle.
+Scorelights for Philips Hue flashes your lights on live sports: touchdowns, field goals, goals, runs, kickoff and the final whistle.
 
 You pick the game you're watching, live or starting within a day. Every score in it flashes in the scoring team's colours, both teams' included, and following ends with the final.
 
@@ -23,7 +23,7 @@ bun start test touchdown KC       # preview an effect in a team's colours
 bun start run KC          # follow KC's live or next game; add --dry-run to log without touching the lights
 ```
 
-Bun runs the TypeScript directly and loads `.env` itself, so there is no build step. `bun run compile` produces a standalone binary at `dist/hue-live-sports` for a machine without Bun.
+Bun runs the TypeScript directly and loads `.env` itself, so there is no build step. `bun run compile` produces a standalone binary at `dist/scorelights` for a machine without Bun.
 
 ### Through the Hue Remote API
 
@@ -121,7 +121,7 @@ Because the colours are built in, `test` works for any NFL team whether or not i
 
 ## Cloudflare Worker
 
-The hosted version runs at [hue-live-sports.tuler.dev](https://hue-live-sports.tuler.dev). Anyone with a Hue Bridge can open it, press **Connect Hue**, sign in on Philips Hue's own site, pick a room, and then pick the game they're watching from the live and upcoming games of a league. The lights follow that one game until its final; the next game is picked the same way. A TV delay and effects are kept between games. There are no accounts: the bridge is the account, and a signed cookie keeps you signed in for 30 days.
+The hosted version runs at [scorelights.app](https://scorelights.app), as the Worker `scorelights`. Anyone with a Hue Bridge can open it, press **Connect Hue**, sign in on Philips Hue's own site, pick a room, and then pick the game they're watching from the live and upcoming games of a league. The lights follow that one game until its final; the next game is picked the same way. A TV delay and effects are kept between games. There are no accounts: the bridge is the account, and a signed cookie keeps you signed in for 30 days.
 
 [`src/worker`](src/worker) runs the same pipeline as the local service, with no bridge on the local network:
 
@@ -133,7 +133,7 @@ The page is a React + [Mantine](https://mantine.dev) app in [`web/`](web), built
 
 Page views are counted with [Cloudflare Web Analytics](https://www.cloudflare.com/web-analytics/), which sets no cookies. Production builds include its beacon when `CF_BEACON_TOKEN` (the site token from the Web Analytics dashboard) is set in the shell or `.env`; without it, and under `web:dev` and Storybook, there is no beacon.
 
-Run it locally with `bun run worker:dev`, and `bun run web:dev` for hot reload of the page. It needs `.dev.vars` (gitignored) with `WEBHOOK_SECRET`, `HUE_CLIENT_ID`, `HUE_CLIENT_SECRET`, `ADMIN_TOKEN` and `SESSION_SECRET`. Hue sends sign-ins back to the callback URL registered for the Hue app (`https://hue-live-sports.tuler.dev/auth/callback`), so signing in only works on the deployed Worker. Admin routes take `Authorization: Bearer $ADMIN_TOKEN`: `GET|PUT|DELETE /users/<id>`, `PUT|DELETE /users/<id>/game` (`{ "league", "key" }`, the key being the two team abbreviations, lowercase and sorted, like `dal-nyg`), `POST /users/<id>/test` and `GET /leagues/<league>`.
+Run it locally with `bun run worker:dev`, and `bun run web:dev` for hot reload of the page. It needs `.dev.vars` (gitignored) with `WEBHOOK_SECRET`, `HUE_CLIENT_ID`, `HUE_CLIENT_SECRET`, `ADMIN_TOKEN` and `SESSION_SECRET`. Hue sends sign-ins back to the callback URL registered for the Hue app (`https://scorelights.app/auth/callback`), so signing in only works on the deployed Worker. Admin routes take `Authorization: Bearer $ADMIN_TOKEN`: `GET|PUT|DELETE /users/<id>`, `PUT|DELETE /users/<id>/game` (`{ "league", "key" }`, the key being the two team abbreviations, lowercase and sorted, like `dal-nyg`), `POST /users/<id>/test` and `GET /leagues/<league>`.
 
 ## Development
 

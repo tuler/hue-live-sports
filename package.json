@@ -1,10 +1,10 @@
 {
-  "name": "hue-live-sports",
+  "name": "scorelights",
   "version": "0.1.0",
-  "description": "Flash Philips Hue lights on live sports events (touchdowns, goals, wins)",
+  "description": "Scorelights for Philips Hue: flash your lights when someone scores (touchdowns, goals, wins)",
   "type": "module",
   "bin": {
-    "hue-live-sports": "src/cli.ts"
+    "scorelights": "src/cli.ts"
   },
   "files": [
     "src"
@@ -14,7 +14,7 @@
   },
   "scripts": {
     "start": "bun src/cli.ts",
-    "compile": "bun build src/cli.ts --compile --outfile dist/hue-live-sports",
+    "compile": "bun build src/cli.ts --compile --outfile dist/scorelights",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.worker.json && tsc --noEmit -p tsconfig.web.json",
     "build:web": "vite build --config web/vite.config.ts",
     "web:dev": "vite --config web/vite.config.ts",

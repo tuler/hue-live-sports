@@ -1,6 +1,6 @@
-# hue-live-sports
+# Scorelights
 
-Flashes Philips Hue lights on live sports events. A Bun + TypeScript CLI that learns scores from ESPN's scoreboard (polling) and/or pushed webhooks, infers events from score changes, and plays effects through the Hue Bridge's local API (CLIP v2). See `README.md` for user-facing setup and config.
+Scorelights (one word, lowercase L; "Scorelights for Philips Hue") flashes Philips Hue lights on live sports events. A Bun + TypeScript CLI that learns scores from ESPN's scoreboard (polling) and/or pushed webhooks, infers events from score changes, and plays effects through the Hue Bridge's local API (CLIP v2). See `README.md` for user-facing setup and config.
 
 ## Commands
 
@@ -9,7 +9,7 @@ bun install
 bun run typecheck      # tsc three times: Bun types (CLI), Workers types (src/worker and its imports), DOM types (web/)
 bun test               # all tests; Hue client tests need `openssl`, skipped without it
 bun start <command>    # discover | pair | remote-auth | groups | games | teams | test | emit | run (bridge commands take --remote)
-bun run compile        # standalone binary at dist/hue-live-sports
+bun run compile        # standalone binary at dist/scorelights
 bun run worker:dev     # the Worker locally (needs .dev.vars); builds web/ first. worker:deploy publishes both
 bun run web:dev        # the settings page with hot reload, proxying /api and /auth to worker:dev on :8787
 bun run storybook      # every UI component and screen on :6006, against a fake /api (web/src/stories/fakeApi.ts)
@@ -64,6 +64,7 @@ Data flows one way: sources -> tracker -> events -> dispatcher -> bridge.
 - **Score sources feed the receiver; they don't touch the tracker.** In the Worker even ESPN polling arrives as a signed webhook delivery, with `source: "espn"` and `complete: true` (the whole board).
 - **`hue.ts` and `hue-remote.ts` must stay Worker-safe** (only `fetch` and Web globals). Bun and Node calls go in `hue-local.ts` or `token-file.ts`.
 - **Remote refresh tokens are single use.** `HueRemoteAuth.refresh` shares one in-flight refresh between callers; a Worker version needs the same guarantee across requests (one Durable Object per user).
+- **No Hue branding in the logo or graphics.** Hue's developer terms (8(a)(xi)) allow "for Philips Hue" and "works with Philips Hue" in text, never Hue's wordmark, gradient or bulb artwork in a logo. `Logo.tsx` is a placeholder until the real logo exists.
 - **The bridge certificate is self-signed for the bridge id.** Verification is off unless `HUE_CA_FILE` is set; keep that scoped to bridge requests.
 
 ## Verified against the real world
@@ -79,7 +80,7 @@ Still unverified:
 
 - **The settings page** (sign in, pick room, save) has been used end to end on the deployed Worker, back when it picked teams. The game picker that replaced teams has run only in Storybook and against `wrangler dev` (follow, a final ending it, unfollow), not yet on the deployed Worker. Keep the main screen for ordinary fans: anything technical goes under "Advanced".
 - **ESPN's default scoreboard is one US day for most leagues** and rolls over in the US morning; at 1am Eastern it still lists last night's finals. Single dates work with `?dates=YYYYMMDD`; date ranges answer 400 for the NBA.
-- **The Worker** is deployed at `hue-live-sports.tuler.dev` (also `hue-live-sports.tuler.workers.dev`). ESPN answers its feeder from Cloudflare's IPs (with our User-Agent). Under `wrangler dev` the tracker caught a real final and the user queue played it on time. Hue sign-in through `/auth/callback` works, including the app key made by pressing the link button through the cloud, and `POST /users/<id>/test` flashed real lights from the cloud. Not yet seen: a live game's score flashing end to end in production, and token refresh there. Workers reject `fetch` called with the wrong `this` ("Illegal invocation"), which Bun allows: never call a stored `fetch` as a method.
+- **The Worker** was deployed as `hue-live-sports` at `hue-live-sports.tuler.dev`, where what follows in this note was seen. It is now the Worker `scorelights` at `scorelights.app`, with fresh Durable Objects; the renamed Worker has not been deployed yet. ESPN answers its feeder from Cloudflare's IPs (with our User-Agent). Under `wrangler dev` the tracker caught a real final and the user queue played it on time. Hue sign-in through `/auth/callback` works, including the app key made by pressing the link button through the cloud, and `POST /users/<id>/test` flashed real lights from the cloud. Not yet seen: a live game's score flashing end to end in production, and token refresh there. Workers reject `fetch` called with the wrong `this` ("Illegal invocation"), which Bun allows: never call a stored `fetch` as a method.
 - **No provider webhook adapter exists.** Write one from real sample payloads and headers, not from documentation summaries.
 - **NFL lamp colours** other than LAC's have not been reviewed on real bulbs.
 

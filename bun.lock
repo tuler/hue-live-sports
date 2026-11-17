@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "hue-live-sports",
+      "name": "scorelights",
       "dependencies": {
         "@mantine/core": "^9.8.1",
         "@mantine/hooks": "^9.8.1",

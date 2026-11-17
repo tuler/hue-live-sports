@@ -39,7 +39,7 @@ export function Header({ me }: { me: Me | null }) {
   };
   return (
     <Group justify="space-between" mb="xl" wrap="nowrap">
-      <Title order={1} aria-label="Hue Live Sports">
+      <Title order={1} aria-label="Scorelights">
         <Logo />
       </Title>
       <Group gap="sm" wrap="nowrap">
