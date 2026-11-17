@@ -2,7 +2,9 @@
   "league": "nfl",
   "teams": [],
   "group": "Living Room",
+  "poll": true,
   "pollSeconds": 10,
+  "webhook": { "enabled": false, "port": 8787, "path": "/webhook", "adapter": "generic" },
   "delaySeconds": 0,
   "effectMode": "signal",
   "effects": {

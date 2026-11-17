@@ -1,11 +1,14 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { lampColors, toLamp } from "./color.ts";
 import { effectFor, type Config, type Effect } from "./config.ts";
-import { fetchScoreboard, followedGames, resolveLeague, type GameSnapshot, type TeamSide } from "./espn.ts";
-import { describe, detectEvents, eventKeys, type SportsEvent } from "./events.ts";
+import { resolveLeague, type GameSnapshot, type TeamSide } from "./espn.ts";
+import { describe, eventKeys, type SportsEvent } from "./events.ts";
 import type { HueBridge, LightGroup } from "./hue.ts";
 import type { XY } from "./color.ts";
 import { findNflTeam, NFL_LEAGUE } from "./nfl.ts";
+import { runPoller } from "./sources/poll.ts";
+import { ADAPTERS, serveWebhook } from "./sources/webhook.ts";
+import { Tracker } from "./tracker.ts";
 
 export interface Lights {
   bridge: HueBridge;
@@ -36,65 +39,26 @@ export async function play(lights: Lights, config: Config, effect: Effect, color
   else await lights.bridge.signal(lights.group, effect.signal, effect.seconds, colors);
 }
 
-/** Seconds until the next poll: fast while any game is live, slow otherwise. */
-export function nextPollSeconds(games: Iterable<GameSnapshot>, config: Config): number {
-  const states = new Set([...games].map((g) => g.state));
-  if (states.has("in")) return config.pollSeconds;
-  if (states.has("pre")) return 60;
-  return 300;
-}
-
 /**
  * An effect that would start this late is dropped: with many games live the
  * lights can fall behind, and a flash for a minute-old play means nothing.
  */
 export const MAX_LAG_SECONDS = 45;
 
-/**
- * Compare a fresh scoreboard with the previous poll and report every event in
- * the followed games. Returns the new baseline to pass to the next call.
- */
-export function diffScoreboard(
-  previous: ReadonlyMap<string, GameSnapshot>,
-  scoreboard: GameSnapshot[],
-  teams: readonly string[],
-): { events: SportsEvent[]; games: Map<string, GameSnapshot> } {
-  const games = new Map(followedGames(scoreboard, teams).map((g) => [g.id, g]));
-  const events = [...games.values()].flatMap((g) => detectEvents(previous.get(g.id), g, teams));
-  return { events, games };
+export interface Dispatcher {
+  /** Log events and queue their effects. Returns at once. */
+  handle(events: SportsEvent[]): void;
+  /** Resolves when every queued effect has played. */
+  idle(): Promise<void>;
 }
 
-/**
- * Polls the scoreboard until aborted. Without `lights` it only logs (dry run).
- * `source` supplies the scoreboard and exists so tests can replay one.
- */
-export async function run(
-  config: Config,
-  lights: Lights | undefined,
-  signal: AbortSignal,
-  source: (league: string) => Promise<GameSnapshot[]> = fetchScoreboard,
-): Promise<void> {
-  const league = resolveLeague(config.league);
-  const who = config.teams.length ? config.teams.join(", ") : "every game";
-  let games = new Map<string, GameSnapshot>();
+/** Turns events into light effects, one at a time. Without `lights` it only logs. */
+export function createDispatcher(config: Config, lights: Lights | undefined, league: string): Dispatcher {
   // Effects run one at a time so a touchdown and its extra point don't collide.
   let queue: Promise<void> = Promise.resolve();
-
-  log(`Watching ${who} in ${league}${lights ? ` on "${lights.group.name}"` : " (dry run)"}`);
-
-  while (!signal.aborted) {
-    try {
-      const next = diffScoreboard(games, await source(league), config.teams);
-      for (const game of next.games.values()) {
-        const before = games.get(game.id);
-        if (game.state === "in" && before?.state !== "in") log(`Live: ${game.name} (${game.detail})`);
-      }
-      if (games.size === 0) {
-        const live = [...next.games.values()].filter((g) => g.state === "in").length;
-        log(`${next.games.size} game(s) on the board, ${live} live`);
-      }
-
-      for (const event of next.events) {
+  return {
+    handle(events) {
+      for (const event of events) {
         log(describe(event));
         const effect = effectFor(config, eventKeys(event));
         if (!effect || !lights) continue;
@@ -112,12 +76,68 @@ export async function run(
           })
           .catch((err: unknown) => console.error("Effect failed:", err));
       }
-      games = next.games;
-    } catch (err) {
-      // Keep the last baseline so a blip in the feed doesn't lose an event.
-      console.error("Poll failed:", err instanceof Error ? err.message : err);
-    }
-    await sleep(nextPollSeconds(games.values(), config) * 1000, undefined, { signal }).catch(() => undefined);
+    },
+    idle: () => queue,
+  };
+}
+
+export interface RunOptions {
+  /** Supplies the polled scoreboard; exists so tests can replay one. */
+  fetchBoard?: (league: string) => Promise<GameSnapshot[]>;
+  /** Signing secret for the webhook receiver. */
+  webhookSecret?: string;
+  /** Called once the webhook receiver is listening. */
+  onListening?: (url: string) => void;
+}
+
+/**
+ * Runs every enabled source until aborted. The poller and the webhook
+ * receiver feed one tracker, so an event reported by both fires once.
+ */
+export async function run(
+  config: Config,
+  lights: Lights | undefined,
+  signal: AbortSignal,
+  options: RunOptions = {},
+): Promise<void> {
+  const league = resolveLeague(config.league);
+  const tracker = new Tracker(config.teams);
+  const dispatcher = createDispatcher(config, lights, league);
+  const who = config.teams.length ? config.teams.join(", ") : "every game";
+  log(`Watching ${who} in ${league}${lights ? ` on "${lights.group.name}"` : " (dry run)"}`);
+
+  const webhook = config.webhook;
+  let server: ReturnType<typeof serveWebhook> | undefined;
+  if (webhook) {
+    if (!options.webhookSecret) throw new Error("The webhook receiver needs a signing secret: set WEBHOOK_SECRET in .env.");
+    server = serveWebhook(tracker, {
+      league,
+      host: webhook.host,
+      port: webhook.port,
+      path: webhook.path,
+      secret: options.webhookSecret,
+      adapter: ADAPTERS[webhook.adapter]!,
+      onEvents: dispatcher.handle,
+    });
+    log(`Webhook receiver (${webhook.adapter}) listening on ${server.url}`);
+    options.onListening?.(server.url);
   }
-  await queue;
+
+  try {
+    if (config.poll) {
+      await runPoller(tracker, {
+        league,
+        liveSeconds: config.pollSeconds,
+        signal,
+        onEvents: dispatcher.handle,
+        log,
+        fetchBoard: options.fetchBoard,
+      });
+    } else if (!signal.aborted) {
+      await new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once: true }));
+    }
+  } finally {
+    await server?.stop();
+  }
+  await dispatcher.idle();
 }

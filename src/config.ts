@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolveLeague } from "./espn.ts";
 import type { Signal } from "./hue.ts";
 import { NFL_LEAGUE, requireNflTeam } from "./nfl.ts";
+import { ADAPTERS } from "./sources/webhook.ts";
 
 export interface Effect {
   enabled: boolean;
@@ -26,13 +27,26 @@ export interface Config {
   teams: string[];
   /** Name of the Hue room or zone to flash. */
   group: string;
-  /** How often to poll while the game is live. */
+  /** Poll ESPN's scoreboard. On by default; turn off to rely on webhooks alone. */
+  poll: boolean;
+  /** How often to poll while a game is live. */
   pollSeconds: number;
+  /** Receive pushed score updates over HTTP, alongside or instead of polling. */
+  webhook?: WebhookConfig;
   /** Hold effects back this long, to line up with a delayed TV stream. */
   delaySeconds: number;
   /** "signal": bridge-run effect. "pulse": manual flashing with state restore. */
   effectMode: "signal" | "pulse";
   effects: Record<string, Effect>;
+}
+
+export interface WebhookConfig {
+  /** Interface to listen on. Loopback by default: put a tunnel or proxy in front. */
+  host: string;
+  port: number;
+  path: string;
+  /** Payload format, a key of `ADAPTERS` in src/sources/webhook.ts. */
+  adapter: string;
 }
 
 const on = (seconds: number, signal: Signal = "on_off_color"): Effect => ({ enabled: true, seconds, signal });
@@ -120,9 +134,16 @@ export function parseConfig(raw: unknown): Config {
   const nfl = resolveLeague(league) === NFL_LEAGUE;
   const teams = [...new Set((listed as string[]).map((t) => (nfl ? requireNflTeam(t).abbr : t.trim())))];
 
+  const poll = c.poll ?? true;
+  if (typeof poll !== "boolean") throw new Error('Config "poll" must be true or false');
+  const webhook = parseWebhook(c.webhook);
+  if (!poll && !webhook) throw new Error('Config has no score source: enable "poll" or "webhook"');
+
   return {
     league,
     teams,
+    poll,
+    webhook,
     group: text("group"),
     // ESPN refreshes no faster than every few seconds; polling harder gains nothing.
     pollSeconds: seconds("pollSeconds", 10, 5),
@@ -130,6 +151,23 @@ export function parseConfig(raw: unknown): Config {
     effectMode,
     effects,
   };
+}
+
+function parseWebhook(raw: unknown): WebhookConfig | undefined {
+  if (raw === undefined || raw === null || raw === false) return undefined;
+  const w = (raw === true ? {} : raw) as Record<string, unknown>;
+  if (typeof w !== "object") throw new Error('Config "webhook" must be an object');
+  if (w.enabled === false) return undefined;
+  const { host = "127.0.0.1", port = 8787, path = "/webhook", adapter = "generic" } = w;
+  if (typeof host !== "string" || host === "") throw new Error('Config "webhook.host" must be a host name or address');
+  if (typeof port !== "number" || !Number.isInteger(port) || port < 0 || port > 65535) {
+    throw new Error('Config "webhook.port" must be a port number');
+  }
+  if (typeof path !== "string" || !path.startsWith("/")) throw new Error('Config "webhook.path" must start with "/"');
+  if (typeof adapter !== "string" || !(adapter in ADAPTERS)) {
+    throw new Error(`Config "webhook.adapter" must be one of: ${Object.keys(ADAPTERS).join(", ")}`);
+  }
+  return { host, port, path, adapter };
 }
 
 export function effectFor(config: Config, keys: string[]): Effect | undefined {

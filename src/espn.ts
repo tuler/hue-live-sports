@@ -4,7 +4,7 @@
  * anything unexpected is skipped rather than thrown.
  */
 
-import { findNflTeam, NFL_LEAGUE } from "./nfl.ts";
+import { canonicalAbbreviation } from "./nfl.ts";
 
 export type GameState = "pre" | "in" | "post";
 export type Sport = "football" | "soccer" | "hockey" | "baseball" | "basketball" | "other";
@@ -28,6 +28,8 @@ export interface GameSnapshot {
   /** Human-readable clock, e.g. "4:12 - 3rd". */
   detail: string;
   teams: TeamSide[];
+  /** When the source observed this state (ms since epoch), if it says. */
+  asOf?: number;
 }
 
 /** Short aliases for ESPN's "sport/league" path segments. */
@@ -98,8 +100,7 @@ function parseTeam(v: unknown, leaguePath: string): TeamSide | undefined {
   const id = str(team?.id) ?? str(c?.id);
   const raw = str(team?.abbreviation);
   if (!c || !team || !id || !raw) return undefined;
-  // Pin NFL teams to the table's abbreviation, so "WAS" and "WSH" are one team.
-  const abbreviation = (leaguePath === NFL_LEAGUE && findNflTeam(raw)?.abbr) || raw;
+  const abbreviation = canonicalAbbreviation(leaguePath, raw);
   return {
     id,
     abbreviation,

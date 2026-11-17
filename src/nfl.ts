@@ -94,3 +94,11 @@ export function requireNflTeam(query: string): NflTeam {
   }
   throw new Error(`"${query}" is not an NFL team. Use one of: ${NFL_TEAMS.map((t) => t.abbr).join(", ")}.`);
 }
+
+/**
+ * The abbreviation a team is tracked under. NFL teams are pinned to the
+ * table's, so "WAS" from one feed and "WSH" from another are one team.
+ */
+export function canonicalAbbreviation(leaguePath: string, raw: string): string {
+  return (leaguePath === NFL_LEAGUE && findNflTeam(raw)?.abbr) || raw.trim();
+}

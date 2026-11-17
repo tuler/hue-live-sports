@@ -6,6 +6,7 @@ import { fetchScoreboard, followedGames, isAnyTeam, isTeam, LEAGUES, resolveLeag
 import { discoverBridges, HueBridge } from "./hue.ts";
 import { fullName, NFL_LEAGUE, NFL_TEAMS, requireNflTeam } from "./nfl.ts";
 import { play, run, teamColors } from "./runner.ts";
+import { signGeneric } from "./sources/webhook.ts";
 
 const USAGE = `hue-live-sports <command> [options]
 
@@ -19,10 +20,13 @@ Commands
                     Play one effect now, e.g. "any.touchdown KC", "us.touchdown", "win".
                     Uses [team]'s colours, else the first followed team's
   run               Watch the games and flash the lights
+  emit <home> <score> <away> <score> [pre|in|post]
+                    Send a signed test update to the webhook receiver
 
 Options
   -c, --config <path>   Config file (default: ${DEFAULT_CONFIG_PATH})
       --ip <address>    Bridge address (default: $HUE_BRIDGE_IP)
+      --url <url>       With emit: receiver to post to (default: from the config)
       --dry-run         With run or test: log without touching the lights
 
 Leagues: ${Object.keys(LEAGUES).join(", ")}, or an ESPN path like "soccer/eng.1"`;
@@ -46,6 +50,7 @@ async function main(): Promise<void> {
     options: {
       config: { type: "string", short: "c", default: DEFAULT_CONFIG_PATH },
       ip: { type: "string" },
+      url: { type: "string" },
       "dry-run": { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
     },
@@ -135,16 +140,44 @@ async function main(): Promise<void> {
       await play({ bridge: hue, group }, config, effect, colors);
       return;
     }
+    case "emit": {
+      // A signed generic payload, for trying the receiver without a provider.
+      const [home, homeScore, away, awayScore, state = "in"] = positionals.slice(1);
+      if (!home || !away || homeScore === undefined || awayScore === undefined) {
+        throw new Error("Usage: emit <home> <score> <away> <score> [pre|in|post]");
+      }
+      const config = loadConfig(values.config);
+      const secret = process.env.WEBHOOK_SECRET;
+      if (!secret) throw new Error("Set WEBHOOK_SECRET in .env first.");
+      const hook = config.webhook ?? { host: "127.0.0.1", port: 8787, path: "/webhook" };
+      const url = values.url ?? `http://${hook.host}:${hook.port}${hook.path}`;
+      const body = JSON.stringify({
+        state,
+        at: new Date().toISOString(),
+        home: { team: home, score: Number(homeScore) },
+        away: { team: away, score: Number(awayScore) },
+      });
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...signGeneric(body, secret) },
+        body,
+      });
+      console.log(`${res.status} ${await res.text()}`);
+      if (!res.ok) process.exitCode = 1;
+      return;
+    }
     case "run": {
       const config = loadConfig(values.config);
       const stop = new AbortController();
       for (const sig of ["SIGINT", "SIGTERM"] as const) process.once(sig, () => stop.abort());
       if (values["dry-run"]) {
-        await run(config, undefined, stop.signal);
+        await run(config, undefined, stop.signal, { webhookSecret: process.env.WEBHOOK_SECRET });
         return;
       }
       const hue = bridge(values.ip, true);
-      await run(config, { bridge: hue, group: await hue.findGroup(config.group) }, stop.signal);
+      await run(config, { bridge: hue, group: await hue.findGroup(config.group) }, stop.signal, {
+        webhookSecret: process.env.WEBHOOK_SECRET,
+      });
       return;
     }
     default:

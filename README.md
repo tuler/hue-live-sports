@@ -4,7 +4,7 @@ Flash Philips Hue lights on live sports: touchdowns, field goals, goals, runs, k
 
 By default it follows every live game in the league and flashes for each score in the scoring team's colours. Name your teams and it follows only their games, with separate effects for your scores and the opponent's.
 
-It polls ESPN's public scoreboard, works out what happened from the change in score, and plays an effect in the scoring team's colours through the Hue Bridge's local API. Nothing leaves your network except the scoreboard request.
+It learns the score by polling ESPN's public scoreboard, by receiving webhooks, or both. It works out what happened from the change in score and plays an effect in the scoring team's colours through the Hue Bridge's local API.
 
 ## Setup
 
@@ -32,7 +32,9 @@ Bun runs the TypeScript directly and loads `.env` itself, so there is no build s
 | `league` | | `nfl`, `ncaaf`, `nba`, `wnba`, `nhl`, `mlb`, `mls`, `epl`, `laliga`, `bundesliga`, `seriea`, `ligue1`, `brasileirao`, `ucl`, or any ESPN path such as `soccer/ned.1` |
 | `teams` | `[]` | Empty follows every game. Otherwise only these teams' games. NFL: any of the 32 teams by abbreviation, nickname or full name (`NYG`, `Giants`). Other leagues: ESPN abbreviation or full name |
 | `group` | | Hue room or zone to flash |
-| `pollSeconds` | `10` | Poll interval while the game is live (minimum 5) |
+| `poll` | `true` | Poll ESPN's scoreboard |
+| `pollSeconds` | `10` | Poll interval while a game is live (minimum 5) |
+| `webhook` | off | Receive pushed updates: `{ "host", "port", "path", "adapter" }`, see [Score sources](#score-sources) |
 | `delaySeconds` | `0` | Hold effects back to match a delayed TV stream |
 | `effectMode` | `signal` | `signal` lets the bridge run the flash and restore the lights. `pulse` flashes by hand, for lights that ignore signaling |
 | `effects` | see below | Per-event overrides |
@@ -48,6 +50,52 @@ Kinds: `touchdown`, `field_goal`, `two_points`, `extra_point`, `goal`, `run`, `b
 
 Effects play one at a time. With many games live they can queue up, so one that would start more than 45 seconds late is skipped.
 
+## Score sources
+
+Two sources feed one tracker, and you can run either or both.
+
+- **Poller** (`poll`, on by default): asks ESPN's scoreboard every `pollSeconds` while a game is live, and less often otherwise.
+- **Webhook receiver** (`webhook`): an HTTP endpoint that takes pushed score updates. It listens on `127.0.0.1:8787/webhook` by default and needs `WEBHOOK_SECRET` in `.env`.
+
+Running both is the recommended setup once you have a push feed: the webhook brings the score sooner, and the poller supplies the starting score for each game and catches anything a webhook missed. The tracker makes sure a play reported by both flashes once:
+
+- a score goes up as soon as either source reports it;
+- a lower score is believed only from the source that reported the higher one, or once it has lasted 90 seconds, so a slow feed cannot undo a fast one;
+- a game never moves backwards from live to scheduled, or from final to live;
+- games are matched across sources by their two teams, since feeds number games differently.
+
+With the webhook alone, the first update for each game only sets its starting score. If that first update is itself a score, that one play is not flashed.
+
+Matching across sources relies on both using the same team abbreviations. NFL teams are normalised by the built-in table; for other leagues check that your feed's abbreviations match ESPN's.
+
+### Webhook payload
+
+The receiver speaks one format today, `generic`: the current state of a game, or a list of them (`[...]` or `{ "games": [...] }`).
+
+```json
+{
+  "state": "in",
+  "detail": "4:12 - 3rd",
+  "at": "2026-11-22T18:41:07Z",
+  "home": { "team": "NYG", "score": 7 },
+  "away": { "team": "DAL", "score": 0 }
+}
+```
+
+`state` is `pre`, `in` or `post`. `detail` and `at` are optional; `at` lets the tracker drop a retry that arrives after a newer update. Each request carries `X-Timestamp` (Unix seconds, within five minutes of now) and `X-Signature: sha256=<hex>`, the HMAC-SHA256 of `<timestamp>.<raw body>` under `WEBHOOK_SECRET`.
+
+No sports-data provider sends this format, so a provider's webhooks need an adapter: an entry in `ADAPTERS` in [`src/sources/webhook.ts`](src/sources/webhook.ts) that checks the provider's signature and maps its payload to game snapshots. The handler itself is a plain `Request -> Response` function, so it can also run as a Cloudflare Worker.
+
+To try the receiver without a provider:
+
+```sh
+bun start run --dry-run          # with "webhook" enabled in config.json
+bun start emit NYG 0 DAL 0       # sets the starting score
+bun start emit NYG 7 DAL 0       # logs a Giants touchdown
+```
+
+A provider on the internet cannot reach `127.0.0.1`. Put a tunnel such as `cloudflared` in front rather than opening the port.
+
 ## NFL teams
 
 All 32 teams are built in (`bun start teams` lists them), each with one or two lamp colours in [`src/nfl.ts`](src/nfl.ts). These start from the team's palette but are tuned for bulbs: black is dropped, silver becomes white, and a few dark shades are more saturated. To change one, edit the table or set `colors` on an effect.
@@ -58,6 +106,7 @@ Because the colours are built in, `test` works for any NFL team whether or not i
 
 - **The feed can run ahead of or behind your TV.** `delaySeconds` fixes a feed that spoils the play. Nothing fixes a feed that is late.
 - **ESPN's scoreboard is undocumented** and can change or lag without notice. `src/espn.ts` is the only file that knows its shape.
+- **Two games between the same teams on one scoreboard**, such as a baseball doubleheader, are read as one game.
 - **Events are inferred from the score.** Two football points could be a conversion or a safety, and a touchdown plus its extra point inside one poll reads as a single 7-point touchdown. Cards, penalties and other non-scoring plays are not detected.
 - **The bridge certificate is not verified by default**, since it is issued by Signify's private CA for the bridge id rather than its IP. To verify it, set `HUE_CA_FILE` to the Hue root CA and `HUE_BRIDGE_ID` to the bridge id.
 

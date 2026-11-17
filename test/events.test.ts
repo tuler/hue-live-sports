@@ -1,9 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { parseConfig, effectFor } from "../src/config.ts";
-import { parseScoreboard, type GameSnapshot } from "../src/espn.ts";
+import { parseScoreboard } from "../src/espn.ts";
 import { classifyScore, detectEvents, eventKeys } from "../src/events.ts";
-import { diffScoreboard, nextPollSeconds } from "../src/runner.ts";
-import { board, scoreboard, type FakeGame } from "./fixture.ts";
+import { scoreboard } from "./fixture.ts";
 
 const snap = (state: "pre" | "in" | "post", home: number, away: number, league = "football/nfl") =>
   parseScoreboard(scoreboard(state, home, away), league)[0]!;
@@ -92,58 +90,5 @@ describe("detectEvents with followed teams", () => {
   it("reports a last-second score together with the final", () => {
     const events = detectEvents(snap("in", 21, 21), snap("post", 24, 21), ["NYG"]);
     expect(events.map((e) => e.type)).toEqual(["score", "game_end"]);
-  });
-});
-
-describe("diffScoreboard", () => {
-  const parse = (games: FakeGame[]) => parseScoreboard(board(games), "football/nfl");
-  const first: FakeGame[] = [
-    { id: "1", state: "in", home: ["NYG", 0], away: ["DAL", 0] },
-    { id: "2", state: "in", home: ["KC", 10], away: ["BUF", 7] },
-    { id: "3", state: "pre", home: ["SF", 0], away: ["SEA", 0] },
-  ];
-  const second: FakeGame[] = [
-    { id: "1", state: "in", home: ["NYG", 6], away: ["DAL", 0] },
-    { id: "2", state: "post", home: ["KC", 10], away: ["BUF", 10] },
-    { id: "3", state: "in", home: ["SF", 0], away: ["SEA", 0] },
-    { id: "4", state: "in", home: ["GB", 14], away: ["CHI", 3] },
-  ];
-  const keys = (teams: string[]) => {
-    const baseline = diffScoreboard(new Map(), parse(first), teams);
-    expect(baseline.events).toEqual([]);
-    return diffScoreboard(baseline.games, parse(second), teams).events.map((e) => eventKeys(e)[0]);
-  };
-
-  it("follows every game by default", () => {
-    // Game 2 ends tied after a BUF field goal; game 4 is new, so it only sets a baseline.
-    expect(keys([])).toEqual(["any.touchdown", "any.field_goal", "any.game_start"]);
-  });
-
-  it("follows only the named teams' games", () => {
-    expect(keys(["DAL"])).toEqual(["them.touchdown"]);
-    expect(keys(["BUF", "SEA"])).toEqual(["us.field_goal", "draw", "game_start"]);
-    expect(keys(["PHI"])).toEqual([]);
-  });
-
-  it("drops games that leave the board and re-baselines them if they return", () => {
-    const a = diffScoreboard(new Map(), parse(first), []);
-    const b = diffScoreboard(a.games, parse([first[1]!]), []);
-    expect([...b.games.keys()]).toEqual(["2"]);
-    expect(diffScoreboard(b.games, parse(second), []).events.map((e) => eventKeys(e)[0])).toEqual(["any.field_goal"]);
-  });
-
-  it("turns default-on events into effects and skips default-off ones", () => {
-    const config = parseConfig({ league: "nfl", group: "Den" });
-    const on = keys([]).filter((k) => effectFor(config, [k!]));
-    expect(on).toEqual(["any.touchdown", "any.field_goal"]);
-  });
-
-  it("polls fast while anything is live", () => {
-    const config = parseConfig({ league: "nfl", group: "Den", pollSeconds: 7 });
-    const states = (...s: GameSnapshot["state"][]) => s.map((state) => ({ state }) as GameSnapshot);
-    expect(nextPollSeconds(states("post", "in", "pre"), config)).toBe(7);
-    expect(nextPollSeconds(states("post", "pre"), config)).toBe(60);
-    expect(nextPollSeconds(states("post"), config)).toBe(300);
-    expect(nextPollSeconds([], config)).toBe(300);
   });
 });

@@ -1,0 +1,112 @@
+import { followedGames, type GameSnapshot, type GameState, type TeamSide } from "./espn.ts";
+import { detectEvents, type SportsEvent } from "./events.ts";
+
+/**
+ * How long a lower score from a different source is treated as stale rather
+ * than as a correction. Feeds lag each other by up to a minute.
+ */
+export const STALE_SCORE_MS = 90_000;
+/** A game nobody has reported on for this long is forgotten. */
+export const IDLE_GAME_MS = 12 * 60 * 60 * 1000;
+
+const RANK: Record<GameState, number> = { pre: 0, in: 1, post: 2 };
+const teamKey = (t: TeamSide): string => t.abbreviation.toLowerCase();
+
+/**
+ * Identity of a game across sources. Feeds number games differently, so a
+ * game is known by its two teams. (Two games between the same teams on one
+ * scoreboard, such as a baseball doubleheader, would be read as one.)
+ */
+export const gameKey = (g: GameSnapshot): string => g.teams.map(teamKey).sort().join("-");
+
+interface Tracked {
+  game: GameSnapshot;
+  /** Which source set each team's current score, and when. */
+  scoredBy: Map<string, { source: string; at: number }>;
+  /** Sources that currently list this game, and the newest `asOf` each sent. */
+  sources: Map<string, number>;
+  seenAt: number;
+}
+
+/**
+ * Holds the last known state of every followed game and turns updates from
+ * any number of sources into events.
+ *
+ * Sources disagree for a while after every play, because some are faster
+ * than others. The tracker merges them so each event fires once:
+ *  - a score rises as soon as any source reports it;
+ *  - a lower score is believed only from the source that reported the higher
+ *    one (a real correction), or once it has outlasted `STALE_SCORE_MS`;
+ *  - a game never moves backwards from live to scheduled or final to live;
+ *  - an update older than one already applied from the same source is dropped.
+ */
+export class Tracker {
+  private readonly tracked = new Map<string, Tracked>();
+
+  constructor(
+    private readonly teams: readonly string[],
+    private readonly now: () => number = Date.now,
+  ) {}
+
+  games(): GameSnapshot[] {
+    return [...this.tracked.values()].map((t) => t.game);
+  }
+
+  /**
+   * Apply an update from `source`. Set `complete` when `games` is the
+   * source's whole scoreboard, so games it no longer lists can be dropped.
+   * The first sighting of a game only sets its baseline.
+   */
+  update(games: GameSnapshot[], source: string, complete = false): SportsEvent[] {
+    const now = this.now();
+    const events: SportsEvent[] = [];
+    const listed = new Set<string>();
+
+    for (const incoming of followedGames(games, this.teams)) {
+      const key = gameKey(incoming);
+      listed.add(key);
+      const asOf = incoming.asOf ?? now;
+      const known = this.tracked.get(key);
+      if (!known) {
+        this.tracked.set(key, {
+          game: { ...incoming, id: key },
+          scoredBy: new Map(incoming.teams.map((t) => [teamKey(t), { source, at: now }])),
+          sources: new Map([[source, asOf]]),
+          seenAt: now,
+        });
+        continue;
+      }
+      if (asOf < (known.sources.get(source) ?? 0)) continue; // a late redelivery
+      known.sources.set(source, asOf);
+      known.seenAt = now;
+      const merged = this.merge(known, incoming, source, now);
+      events.push(...detectEvents(known.game, merged, this.teams));
+      known.game = merged;
+    }
+
+    for (const [key, t] of this.tracked) {
+      if (complete && !listed.has(key)) t.sources.delete(source);
+      if (t.sources.size === 0 || now - t.seenAt > IDLE_GAME_MS) this.tracked.delete(key);
+    }
+    return events;
+  }
+
+  private merge(known: Tracked, incoming: GameSnapshot, source: string, now: number): GameSnapshot {
+    const forward = RANK[incoming.state] >= RANK[known.game.state];
+    const teams = known.game.teams.map((mine) => {
+      const theirs = incoming.teams.find((t) => teamKey(t) === teamKey(mine));
+      if (!theirs || theirs.score === mine.score) return mine;
+      const set = known.scoredBy.get(teamKey(mine));
+      const lower = theirs.score < mine.score;
+      if (lower && set && set.source !== source && now - set.at < STALE_SCORE_MS) return mine;
+      known.scoredBy.set(teamKey(mine), { source, at: now });
+      return { ...mine, score: theirs.score };
+    });
+    return {
+      ...known.game,
+      state: forward ? incoming.state : known.game.state,
+      detail: forward ? incoming.detail : known.game.detail,
+      teams,
+    };
+  }
+}

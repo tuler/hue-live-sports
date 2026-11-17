@@ -27,7 +27,7 @@ async function replay(polls: (FakeGame[] | Error)[], overrides: object = {}) {
   const logs = spyOn(console, "log").mockImplementation(() => {});
   const errors = spyOn(console, "error").mockImplementation(() => {});
   try {
-    await run(config, { bridge, group }, stop.signal, source);
+    await run(config, { bridge, group }, stop.signal, { fetchBoard: source });
   } finally {
     logs.mockRestore();
     errors.mockRestore();
