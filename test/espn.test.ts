@@ -1,8 +1,18 @@
 import { describe, expect, it } from "bun:test";
-import { followedGames, parseScoreboard, resolveLeague, sportOf } from "../src/espn.ts";
+import { fetchScoreboard, followedGames, parseScoreboard, resolveLeague, sportOf } from "../src/espn.ts";
 import { board, scoreboard } from "./fixture.ts";
 
 describe("espn", () => {
+  it("sends its own User-Agent, since ESPN's CDN rejects Bun's default", async () => {
+    let sent: Headers | undefined;
+    const fake = (async (_url: string, init?: RequestInit) => {
+      sent = new Headers(init?.headers);
+      return Response.json(scoreboard("in", 14, 7));
+    }) as unknown as typeof fetch;
+    await fetchScoreboard("football/nfl", fake);
+    expect(sent?.get("user-agent")).toMatch(/^hue-live-sports\//);
+  });
+
   it("resolves aliases and raw paths", () => {
     expect(resolveLeague("NFL")).toBe("football/nfl");
     expect(resolveLeague("soccer/eng.1")).toBe("soccer/eng.1");

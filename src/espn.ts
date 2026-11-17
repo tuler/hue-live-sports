@@ -138,12 +138,18 @@ export function parseScoreboard(json: unknown, leaguePath: string): GameSnapshot
   return games;
 }
 
+/**
+ * ESPN's CDN (Akamai) answers 403 to Bun's default User-Agent ("Bun/x.y"),
+ * so always send our own.
+ */
+export const USER_AGENT = "hue-live-sports/0.1";
+
 export async function fetchScoreboard(
   leaguePath: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<GameSnapshot[]> {
   const res = await fetchImpl(scoreboardUrl(leaguePath), {
-    headers: { accept: "application/json" },
+    headers: { accept: "application/json", "user-agent": USER_AGENT },
     signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) throw new Error(`ESPN scoreboard returned HTTP ${res.status}`);
