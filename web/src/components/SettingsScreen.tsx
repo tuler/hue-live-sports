@@ -1,4 +1,4 @@
-import { Accordion, Alert, Box, Button, Container, Group, NumberInput, Select, Stack, Text } from "@mantine/core";
+import { Accordion, Alert, Box, Button, Group, NumberInput, Select, Stack, Text } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useEffect, useState } from "react";
 import { api, type FollowedGame, type Game, type Group as LightGroup, type Me, type Settings } from "../api.ts";
@@ -126,7 +126,7 @@ export function SettingsScreen({ me }: { me: Me }) {
   };
 
   return (
-    <Stack gap="md" pb={96}>
+    <Stack gap="md">
       {!me.settings && (
         <Alert color="orange" variant="light" title="Almost there">
           Check the room to flash, then pick the game you're watching.
@@ -199,27 +199,24 @@ export function SettingsScreen({ me }: { me: Me }) {
         </Accordion.Item>
       </Accordion>
 
+      {/* Sticky, not fixed: it floats while the settings scroll, then settles above the footer. */}
       <Box
-        pos="fixed"
+        pos="sticky"
         bottom={0}
-        left={0}
-        right={0}
         py="md"
         style={{
           background: "linear-gradient(transparent, var(--mantine-color-body) 35%)",
           zIndex: 10,
         }}
       >
-        <Container size={640} px="md">
-          <Group justify="space-between">
-            <Button variant="default" size="md" onClick={test} loading={busy === "test"} disabled={busy !== null && busy !== "test"}>
-              Test flash
-            </Button>
-            <Button size="md" onClick={() => save()} loading={busy === "save"} disabled={!dirty || (busy !== null && busy !== "save")}>
-              {dirty ? "Save" : "Saved"}
-            </Button>
-          </Group>
-        </Container>
+        <Group justify="space-between">
+          <Button variant="default" size="md" onClick={test} loading={busy === "test"} disabled={busy !== null && busy !== "test"}>
+            Test flash
+          </Button>
+          <Button size="md" onClick={() => save()} loading={busy === "save"} disabled={!dirty || (busy !== null && busy !== "save")}>
+            {dirty ? "Save" : "Saved"}
+          </Button>
+        </Group>
       </Box>
     </Stack>
   );

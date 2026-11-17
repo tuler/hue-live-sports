@@ -1,6 +1,7 @@
 import { Alert, Center, Container, Loader } from "@mantine/core";
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError, type Me } from "./api.ts";
+import { Footer } from "./components/Footer.tsx";
 import { Header } from "./components/Header.tsx";
 import { SettingsScreen } from "./components/SettingsScreen.tsx";
 import { SignedOut } from "./components/SignedOut.tsx";
@@ -38,6 +39,7 @@ export function App() {
       )}
       {me.state === "error" && <Alert color="red">{me.message}</Alert>}
       {me.state === "ready" && (me.value ? <SettingsScreen me={me.value} /> : <SignedOut />)}
+      <Footer />
     </Container>
   );
 }

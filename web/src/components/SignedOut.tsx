@@ -6,7 +6,7 @@ export function SignedOut() {
   return (
     <Paper withBorder radius="lg" p={{ base: "lg", sm: 48 }} ta="center">
       <Center mb="lg">
-        <Logo size={72} />
+        <Logo size={56} />
       </Center>
       <Title order={2} mb="xs">
         Your lights, in your team's colours

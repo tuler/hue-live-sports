@@ -13,10 +13,9 @@ export function Header({ me }: { me: Me | null }) {
   };
   return (
     <Group justify="space-between" mb="xl" wrap="nowrap">
-      <Group gap="sm">
+      <Title order={1} aria-label="Hue Live Sports">
         <Logo />
-        <Title order={3}>Hue Live Sports</Title>
-      </Group>
+      </Title>
       {me && (
         <Group gap="xs">
           <Badge variant="light" color="gray" size="lg" radius="sm" visibleFrom="xs">
