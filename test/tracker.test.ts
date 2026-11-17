@@ -47,8 +47,8 @@ describe("Tracker with one source", () => {
   });
 
   it("turns default-on events into effects and skips default-off ones", () => {
-    const config = parseConfig({ league: "nfl", group: "Den" });
-    expect(keys().filter((k) => effectFor(config, [k!]))).toEqual(["touchdown", "field_goal"]);
+    const config = parseConfig({ league: "nfl", group: "Den", effects: { draw: { enabled: false } } });
+    expect(keys().filter((k) => effectFor(config, [k!]))).toEqual(["touchdown", "field_goal", "game_start"]);
   });
 
   it("drops a game its only source stops listing, and re-baselines it on return", () => {
@@ -74,6 +74,18 @@ describe("Tracker with one source", () => {
     advance(IDLE_GAME_MS + 1);
     feed("webhook", [{ id: "9", state: "in", home: ["KC", 0], away: ["BUF", 0] }]);
     expect(t.games().map((g) => g.name)).toEqual(["BUF @ KC"]);
+  });
+
+  it("starts a stale game afresh on request, instead of replaying the scores it missed", () => {
+    const { feed, advance, t } = tracker();
+    feed("poll", [game(0, 0)]);
+    advance(1000);
+    t.forgetStale("dal-nyg", 60_000); // still fresh: kept
+    expect(feed("poll", [game(3, 0)])).toEqual(["field_goal"]);
+    advance(60_001);
+    t.forgetStale("dal-nyg", 60_000);
+    expect(feed("poll", [game(17, 7)])).toEqual([]);
+    expect(feed("poll", [game(17, 14)])).toEqual(["touchdown"]);
   });
 });
 

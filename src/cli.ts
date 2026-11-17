@@ -3,7 +3,8 @@ import { parseArgs } from "node:util";
 import { toLamp, type XY } from "./color.ts";
 import { effectFor } from "./config.ts";
 import { DEFAULT_CONFIG_PATH, loadConfig } from "./config-file.ts";
-import { fetchScoreboard, followedGames, isTeam, LEAGUES, resolveLeague } from "./espn.ts";
+import { fetchScoreboard, isTeam, LEAGUES, resolveLeague } from "./espn.ts";
+import { followable, followGame, type FollowedGame } from "./follow.ts";
 import { discoverBridges, HueBridge } from "./hue.ts";
 import { localTransport } from "./hue-local.ts";
 import { codeFromRedirect, HueRemoteAuth, remoteTransport } from "./hue-remote.ts";
@@ -21,12 +22,12 @@ Commands
                     with --remote, the button is pressed for you)
   remote-auth       Sign in to the Hue Remote API and save its tokens
   groups            List rooms and zones on the bridge
-  games             Show the games being followed
+  games             Show the games on the league's scoreboard
   teams             List the 32 NFL teams and their lamp colours
-  test <effect> [team]
-                    Play one effect now, e.g. "touchdown KC", "win".
-                    Uses [team]'s colours, else the first tracked team's
-  run               Watch the games and flash the lights
+  test <effect> <team>
+                    Play one effect now in a team's colours, e.g. "touchdown KC"
+  run <team>        Follow <team>'s live or next game (within a day) and flash
+                    the lights for it until the final
   emit <home> <score> <away> <score> [pre|in|post]
                     Send a signed test update to the webhook receiver
 
@@ -38,6 +39,16 @@ Options
       --dry-run         With run or test: log without touching the lights
 
 Leagues: ${Object.keys(LEAGUES).join(", ")}, or an ESPN path like "soccer/eng.1"`;
+
+/** `team`'s live game, else its next one within a day. */
+async function gameOf(league: string, team: string): Promise<FollowedGame> {
+  const path = resolveLeague(league);
+  const name = path === NFL_LEAGUE ? requireNflTeam(team).abbr : team;
+  const now = Date.now();
+  const game = followable(await fetchScoreboard(path), now).find((g) => g.teams.some((t) => isTeam(t, name)));
+  if (!game) throw new Error(`${team} has no live game, and none in the next day on the ${league} scoreboard (see: games).`);
+  return followGame(league, game, now);
+}
 
 interface BridgeFlags {
   ip?: string;
@@ -125,9 +136,9 @@ async function main(): Promise<void> {
     case "game":
     case "games": {
       const config = loadConfig(values.config);
-      const games = followedGames(await fetchScoreboard(resolveLeague(config.league)), config.teams);
+      const games = await fetchScoreboard(resolveLeague(config.league));
       if (games.length === 0) {
-        console.log(`No ${config.teams.join(", ") || config.league} games on the scoreboard right now.`);
+        console.log(`No ${config.league} games on the scoreboard right now.`);
         return;
       }
       for (const g of games) {
@@ -152,8 +163,7 @@ async function main(): Promise<void> {
       if (!effect) throw new Error(`Effect "${arg}" is unknown or disabled in ${values.config}.`);
       const league = resolveLeague(config.league);
 
-      // Whose colours to show: the named team, else the first tracked team.
-      const name = teamArg ?? config.teams[0];
+      const name = teamArg;
       let colors: XY[];
       if (effect.colors?.length) {
         colors = toLamp(effect.colors);
@@ -209,14 +219,16 @@ async function main(): Promise<void> {
     }
     case "run": {
       const config = loadConfig(values.config);
+      if (!arg) throw new Error(`Name the team whose game to follow, e.g. "run KC" (see: games).`);
+      const game = await gameOf(config.league, arg);
       const stop = new AbortController();
       for (const sig of ["SIGINT", "SIGTERM"] as const) process.once(sig, () => stop.abort());
       if (values["dry-run"]) {
-        await run(config, undefined, stop.signal, { webhookSecret: process.env.WEBHOOK_SECRET });
+        await run(config, game, undefined, stop.signal, { webhookSecret: process.env.WEBHOOK_SECRET });
         return;
       }
       const hue = bridge(flags, true);
-      await run(config, { bridge: hue, group: await hue.findGroup(config.group) }, stop.signal, {
+      await run(config, game, { bridge: hue, group: await hue.findGroup(config.group) }, stop.signal, {
         webhookSecret: process.env.WEBHOOK_SECRET,
       });
       return;

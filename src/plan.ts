@@ -6,7 +6,8 @@ import type { XY } from "./color.ts";
 import { effectFor, type Effect, type Settings } from "./config.ts";
 import { colorsFor, MAX_LAG_SECONDS } from "./effects.ts";
 import { resolveLeague } from "./espn.ts";
-import { describe, forTeams, type SportsEvent } from "./events.ts";
+import { describe, type SportsEvent } from "./events.ts";
+import { forGame, type FollowedGame } from "./follow.ts";
 
 export interface PlannedEffect {
   /** When to start, after the viewer's TV delay (ms since epoch). */
@@ -16,16 +17,22 @@ export interface PlannedEffect {
   colors: XY[];
 }
 
-/** The events this viewer tracks, as effects due `delaySeconds` from `now`. Disabled ones are left out. */
-export function planEffects(events: SportsEvent[], settings: Settings, now: number): PlannedEffect[] {
-  const league = resolveLeague(settings.league);
+/** The followed game's events, as effects due `delaySeconds` from `now`. Disabled ones are left out. */
+export function planEffects(
+  events: SportsEvent[],
+  settings: Settings,
+  game: Pick<FollowedGame, "league" | "key">,
+  now: number,
+): PlannedEffect[] {
+  const league = resolveLeague(game.league);
   // Due at a fixed time, so the TV delay is not added once per queued effect.
   const dueAt = now + settings.delaySeconds * 1000;
   return events.flatMap((event) => {
-    const mine = forTeams(event, settings.teams);
+    const mine = forGame(event, game.key);
     const effect = mine && effectFor(settings, mine.keys);
     if (!mine || !effect) return [];
-    return [{ dueAt, label: describe(event), effect, colors: colorsFor(mine.team, effect, league) }];
+    const colors = colorsFor(effect, league, mine.team ? [mine.team] : event.game.teams);
+    return [{ dueAt, label: describe(event), effect, colors }];
   });
 }
 

@@ -9,10 +9,8 @@ export interface Effect {
   colors?: string[];
 }
 
+/** Lasting choices. The game to follow is picked separately, per game. */
 export interface Settings {
-  league: string;
-  /** Empty means every team in the league. */
-  teams: string[];
   group: string;
   delaySeconds: number;
   effectMode: "signal" | "pulse";
@@ -29,6 +27,8 @@ export interface Me {
   bridge: string;
   connected: boolean;
   settings?: Settings;
+  /** The game being followed, until its final. */
+  game?: FollowedGame;
   leagues: League[];
   effectKeys: string[];
   defaults: Omit<Settings, "group">;
@@ -42,6 +42,29 @@ export interface Team {
   color?: string;
   alternateColor?: string;
 }
+
+export interface GameTeam extends Team {
+  score?: number;
+}
+
+/** A game that can be followed: live, or starting within a day. */
+export interface Game {
+  /** The game's identity: its two teams, e.g. "dal-nyg". */
+  key: string;
+  /** League id, as in `Me.leagues`. */
+  league: string;
+  name: string;
+  state: "pre" | "in";
+  /** ESPN's short status: the clock while live, the kickoff time before. */
+  detail: string;
+  /** ISO time. */
+  startsAt?: string;
+  home: GameTeam;
+  away: GameTeam;
+}
+
+/** The followed game as saved: no live score or status. */
+export type FollowedGame = Pick<Game, "key" | "league" | "name" | "startsAt" | "home" | "away">;
 
 export interface Group {
   name: string;
@@ -71,9 +94,12 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
 export const api = {
   me: () => call<Me>("GET", "/api/me"),
   groups: () => call<Group[]>("GET", "/api/groups"),
-  teams: (league: string) => call<Team[]>("GET", `/api/teams?league=${encodeURIComponent(league)}`),
+  games: (league: string) => call<Game[]>("GET", `/api/games?league=${encodeURIComponent(league)}`),
   save: (settings: Settings) => call<{ settings: Settings }>("PUT", "/api/settings", settings),
-  test: (effect: string, team: Pick<Team, "abbreviation" | "color" | "alternateColor">) =>
+  follow: (game: Pick<Game, "league" | "key">) => call<{ game: FollowedGame }>("PUT", "/api/game", { league: game.league, key: game.key }),
+  unfollow: () => call<{ ok: true }>("DELETE", "/api/game"),
+  /** Without a team, the server uses the followed game's colours. */
+  test: (effect: string, team?: Pick<Team, "abbreviation" | "color" | "alternateColor">) =>
     call<{ result: string }>("POST", "/api/test", { effect, team }),
   disconnect: () => call<{ ok: true }>("DELETE", "/api/me"),
   signOut: () => fetch("/auth/signout", { method: "POST" }),

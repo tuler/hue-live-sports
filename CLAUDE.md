@@ -26,14 +26,15 @@ Data flows one way: sources -> tracker -> events -> dispatcher -> bridge.
 | `src/sources/poll.ts` | Polls ESPN and hands the whole scoreboard to the tracker |
 | `src/sources/webhook.ts` | Signed HTTP receiver; `WebhookAdapter` maps a provider payload to snapshots. Only the `generic` adapter exists |
 | `src/tracker.ts` | Last known state of every game; merges sources so each play fires once |
-| `src/events.ts` | `detectEvents` diffs two snapshots of a game; `forTeams` decides whether an event is for a set of tracked teams; `eventKeys` maps it to config keys |
+| `src/events.ts` | `detectEvents` diffs two snapshots of a game; `eventKeys` maps an event to config keys |
+| `src/follow.ts` | `FollowedGame`: the one game a viewer follows. `followable` lists the games that can be picked (live, or starting within a day); `forGame` decides whether an event is the followed game's |
 | `src/runner.ts` | Local service: wires sources to the tracker; the dispatcher queues effects |
-| `src/plan.ts` | `planEffects`: one viewer's effects for a batch of events (teams, effect, colours, delay) |
+| `src/plan.ts` | `planEffects`: one viewer's effects for a batch of events (followed game, effect, colours, delay) |
 | `src/effects.ts` | Team colours and `play` (signal or pulse) |
 | `src/sources/feed.ts` | The ESPN feeder: a scoreboard as a generic webhook payload; poll interval |
-| `src/worker/` | Cloudflare Worker: `Games` (shared tracker + receiver, per league), `Feeder` (ESPN alarm, per league), `User` (settings, Hue tokens, delayed effect queue) |
+| `src/worker/` | Cloudflare Worker: `Games` (shared tracker + receiver + who follows which game, per league), `Feeder` (ESPN alarm, per league), `User` (settings, followed game, Hue tokens, delayed effect queue) |
 | `src/worker/index.ts` | Routes: settings page, Hue sign-in, session `/api`, admin routes, webhook |
-| `web/` | The settings page: React + Mantine, built by Vite to `dist/web` and served as Worker static assets. Simple screen first; effects and flash mode live under "Advanced" |
+| `web/` | The settings page: React + Mantine, built by Vite to `dist/web` and served as Worker static assets. Game picker and room first; effects and flash mode live under "Advanced" |
 | `web/src/components/` | One file per component, each with a `.stories.tsx`. Stories get a fake `/api` from `.storybook/preview.tsx`; a story overrides routes with `parameters.api` |
 | `src/worker/session.ts` | Signed session and OAuth-state cookies |
 | `src/hue.ts` | Bridge client over a `HueTransport`: pairing, rooms/zones, `signal` (bridge-run flash) and `pulse` (manual flash + restore) |
@@ -42,7 +43,7 @@ Data flows one way: sources -> tracker -> events -> dispatcher -> bridge.
 | `src/token-file.ts` | CLI's `TokenStore`: `.hue-tokens.json` |
 | `src/espn.ts` | The only file that knows ESPN's response shape; defines `GameSnapshot` |
 | `src/nfl.ts` | The 32 NFL teams, aliases and lamp colours |
-| `src/config.ts` | `Settings` (one viewer's choices) and `Config` (local service) parsing, default effects |
+| `src/config.ts` | `Settings` (one viewer's lasting choices) and `Config` (local service) parsing, default effects |
 | `src/config-file.ts` | Reads `config.json` (Bun only) |
 | `src/color.ts` | Hex to CIE xy conversion |
 | `src/cli.ts` | Command-line entry point |
@@ -53,7 +54,9 @@ Data flows one way: sources -> tracker -> events -> dispatcher -> bridge.
 - **The tracker owns deduplication.** Sources must not diff or dedupe themselves; they report what they see. The merge rules (stale lower scores, state never moving backwards, late redeliveries) live in `Tracker.merge` and are covered by `test/tracker.test.ts`.
 - **Games are matched across sources by their two team abbreviations**, never by id. Anything producing a `GameSnapshot` must pass team names through `canonicalAbbreviation`.
 - **A game's first sighting only sets a baseline** and fires nothing, so starting mid-game does not replay the score.
-- **Events are team-neutral and the tracker follows every game.** Game state is the same for everyone; only `forTeams` decides whether an event belongs to someone's tracked teams (any event in one of their games, opponents' scores included). Keep per-user choices (teams, effects, delay) out of the tracker so one tracker can serve every user.
+- **Events are team-neutral and the tracker follows every game.** Game state is the same for everyone; only `forGame` decides whether an event belongs to the game someone follows (both teams' scores). Keep per-user choices (followed game, effects, delay) out of the tracker so one tracker can serve every user.
+- **A viewer follows one game, picked per game.** There are no team or league preferences. Following ends with the game's final, or `FOLLOW_MS` after kickoff if no final is seen; `Settings` hold only what lasts between games (room, delay, effects). The local CLI does the same with `run <team>`.
+- **Subscribing re-baselines a stale game.** `Games.subscribe` calls `Tracker.forgetStale`, so a game the feeder stopped polling (nobody followed it) does not replay every score since when someone starts following it.
 - **NFL colours in `src/nfl.ts` are lamp colours, not brand colours** (black dropped, silver as white, some shades saturated). They were chosen without seeing real bulbs.
 - **`createWebhookHandler` must stay a plain `Request -> Response` function** using only Web APIs (WebCrypto, not `node:crypto`); the Worker's `Games` object runs it.
 - **Everything `src/worker` imports must be Worker-safe.** The second typecheck enforces it: it has no Bun or Node types. Bun-only code lives in `cli.ts`, `runner.ts`, `config-file.ts`, `hue-local.ts`, `token-file.ts` and `sources/poll.ts`.
@@ -74,7 +77,8 @@ Still unverified:
 
 - **The Hue Remote API client** was written from Q42.HueApi and node-hue-api source (Hue's own docs need a developer login). `remote-auth`, `groups --remote` and `test --remote` work against the real service: the token endpoint takes basic auth, the local app key is accepted remotely, and signaling through `/route` flashed real lights with no delay noticeable next to the LAN. Unknowns: token refresh against the real service and rate limits.
 
-- **The settings page** (sign in, pick room and teams, save) has been used end to end on the deployed Worker. Keep the main screen for ordinary fans: anything technical goes under "Advanced".
+- **The settings page** (sign in, pick room, save) has been used end to end on the deployed Worker, back when it picked teams. The game picker that replaced teams has run only in Storybook and against `wrangler dev` (follow, a final ending it, unfollow), not yet on the deployed Worker. Keep the main screen for ordinary fans: anything technical goes under "Advanced".
+- **ESPN's default scoreboard is one US day for most leagues** and rolls over in the US morning; at 1am Eastern it still lists last night's finals. Single dates work with `?dates=YYYYMMDD`; date ranges answer 400 for the NBA.
 - **The Worker** is deployed at `hue-live-sports.tuler.dev` (also `hue-live-sports.tuler.workers.dev`). ESPN answers its feeder from Cloudflare's IPs (with our User-Agent). Under `wrangler dev` the tracker caught a real final and the user queue played it on time. Hue sign-in through `/auth/callback` works, including the app key made by pressing the link button through the cloud, and `POST /users/<id>/test` flashed real lights from the cloud. Not yet seen: a live game's score flashing end to end in production, and token refresh there. Workers reject `fetch` called with the wrong `this` ("Illegal invocation"), which Bun allows: never call a stored `fetch` as a method.
 - **No provider webhook adapter exists.** Write one from real sample payloads and headers, not from documentation summaries.
 - **NFL lamp colours** other than LAC's have not been reviewed on real bulbs.

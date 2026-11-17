@@ -12,7 +12,7 @@ export function SignedOut() {
         Your lights, in your team's colours
       </Title>
       <Text c="dimmed" maw={440} mx="auto" mb="xl">
-        Connect your Philips Hue Bridge and pick your teams. Every touchdown, goal and win flashes the room you choose, live.
+        Connect your Philips Hue Bridge and pick the game you're watching. Every touchdown, goal and win flashes the room you choose, live.
       </Text>
       <Button component="a" href="/auth/start" size="lg">
         Connect Hue

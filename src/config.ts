@@ -1,7 +1,6 @@
 import { resolveLeague } from "./espn.ts";
 import { EFFECT_KEYS } from "./events.ts";
 import type { Signal } from "./hue.ts";
-import { NFL_LEAGUE, requireNflTeam } from "./nfl.ts";
 import { ADAPTERS } from "./sources/webhook.ts";
 
 export interface Effect {
@@ -12,20 +11,12 @@ export interface Effect {
   colors?: string[];
 }
 
-/** One viewer's choices: shared by the local config file and a Worker user. */
+/**
+ * One viewer's lasting choices, shared by the local config file and a Worker
+ * user. Which game to follow is not one of them: that is picked per game (see
+ * `FollowedGame`).
+ */
 export interface Settings {
-  /** Alias ("nfl", "epl") or ESPN path ("soccer/eng.1"). */
-  league: string;
-  /**
-   * Teams to track. Empty (the default) tracks every team in the league.
-   * Otherwise every event in these teams' games plays, the opponent's scores
-   * included.
-   *
-   * Entries are ESPN abbreviations or full display names. For the NFL any of
-   * the 32 teams by abbreviation, nickname or full name ("Giants"), stored
-   * here as abbreviations.
-   */
-  teams: string[];
   /** Name of the Hue room or zone to flash. */
   group: string;
   /** Hold effects back this long, to line up with a delayed TV stream. */
@@ -37,6 +28,8 @@ export interface Settings {
 
 /** The local service: settings plus where its scores come from. */
 export interface Config extends Settings {
+  /** Alias ("nfl", "epl") or ESPN path ("soccer/eng.1"): the scoreboard to pick a game from. */
+  league: string;
   /** Poll ESPN's scoreboard. On by default; turn off to rely on webhooks alone. */
   poll: boolean;
   /** How often to poll while a game is live. */
@@ -71,10 +64,10 @@ export const DEFAULT_EFFECTS: Record<string, Effect> = {
   extra_point: off,
   basket: off,
   score: on(5),
-  // Off by default: tracking every team, a busy kickoff slot would queue a flash per game.
-  game_start: off,
+  // Kickoff and draw have no scoring team, so they alternate both teams' colours.
+  game_start: on(5, "alternating"),
   win: on(10, "alternating"),
-  draw: off,
+  draw: on(5, "alternating"),
 };
 
 const fields = (raw: unknown): Record<string, unknown> => {
@@ -96,8 +89,12 @@ export function parseConfig(raw: unknown): Config {
   if (typeof poll !== "boolean") throw new Error('Config "poll" must be true or false');
   const webhook = parseWebhook(c.webhook);
   if (!poll && !webhook) throw new Error('Config has no score source: enable "poll" or "webhook"');
+  const league = c.league;
+  if (typeof league !== "string" || league.trim() === "") throw new Error('Config "league" must be a non-empty string');
+  resolveLeague(league);
   return {
     ...parseSettings(c),
+    league: league.trim(),
     poll,
     webhook,
     // ESPN refreshes no faster than every few seconds; polling harder gains nothing.
@@ -107,11 +104,7 @@ export function parseConfig(raw: unknown): Config {
 
 export function parseSettings(raw: unknown): Settings {
   const c = fields(raw);
-  const text = (key: string): string => {
-    const v = c[key];
-    if (typeof v !== "string" || v.trim() === "") throw new Error(`Config "${key}" must be a non-empty string`);
-    return v.trim();
-  };
+  if (typeof c.group !== "string" || c.group.trim() === "") throw new Error('Config "group" must be a non-empty string');
   const effectMode = c.effectMode ?? "signal";
   if (effectMode !== "signal" && effectMode !== "pulse") {
     throw new Error('Config "effectMode" must be "signal" or "pulse"');
@@ -133,16 +126,7 @@ export function parseSettings(raw: unknown): Settings {
     effects[key] = merged;
   }
 
-  const league = text("league");
-  // `team` is shorthand for a one-entry `teams`.
-  const listed = c.teams ?? (c.team === undefined ? [] : [c.team]);
-  if (!Array.isArray(listed) || listed.some((t) => typeof t !== "string" || t.trim() === "")) {
-    throw new Error('Config "teams" must be a list of team names');
-  }
-  const nfl = resolveLeague(league) === NFL_LEAGUE;
-  const teams = [...new Set((listed as string[]).map((t) => (nfl ? requireNflTeam(t).abbr : t.trim())))];
-
-  return { league, teams, group: text("group"), delaySeconds: seconds(c, "delaySeconds", 0, 0), effectMode, effects };
+  return { group: c.group.trim(), delaySeconds: seconds(c, "delaySeconds", 0, 0), effectMode, effects };
 }
 
 function parseWebhook(raw: unknown): WebhookConfig | undefined {

@@ -1,7 +1,7 @@
 /**
  * Cloudflare Worker entry. Data flows the same way as locally:
- * score sources -> Games (one per league: tracker) -> User (one per bridge:
- * filter, delay, Hue Remote API).
+ * score sources -> Games (one per league: tracker, who follows which game) ->
+ * User (one per bridge: the followed game's effects, delay, Hue Remote API).
  *
  * Public
  *   GET  /                         the settings page: the React app in web/, served as static assets
@@ -11,21 +11,26 @@
  *   POST /webhook/<league>         signed score updates (the ESPN feeder posts here too)
  *
  * Signed in (session cookie)
- *   GET  /api/me                   settings, defaults and the league list
+ *   GET  /api/me                   settings, the followed game, defaults and the league list
  *   GET  /api/groups               rooms and zones on the bridge
- *   GET  /api/teams?league=nfl     teams to pick from
+ *   GET  /api/games?league=nfl     games to pick from: live, and starting within a day
  *   PUT  /api/settings             save settings
- *   POST /api/test                 play one effect now, { "effect", "team" }
+ *   PUT  /api/game                 follow one game, { "league", "key" }, until its final
+ *   DELETE /api/game               stop following
+ *   POST /api/test                 play one effect now, { "effect", "team"? }
  *   DELETE /api/me                 disconnect and forget this bridge
  *
  * Admin (Authorization: Bearer $ADMIN_TOKEN)
- *   GET|PUT|DELETE /users/<id>, PUT /users/<id>/tokens, POST /users/<id>/test, GET /leagues/<league>
+ *   GET|PUT|DELETE /users/<id>, PUT|DELETE /users/<id>/game, PUT /users/<id>/tokens,
+ *   POST /users/<id>/test, GET /leagues/<league>
  */
 import { DEFAULT_EFFECTS } from "../config.ts";
-import { fetchTeams, LEAGUE_NAMES, LEAGUES, resolveLeague, sportOf } from "../espn.ts";
+import { fetchScoreboard, LEAGUE_NAMES, LEAGUES, resolveLeague, sportOf, type GameSnapshot, type TeamSide } from "../espn.ts";
 import { EFFECT_KEYS } from "../events.ts";
+import { followable, followGame, type FollowedGame, type FollowedTeam } from "../follow.ts";
 import { HueRemoteAuth, type RemoteTokens } from "../hue-remote.ts";
-import { fullName, NFL_LEAGUE, NFL_TEAMS } from "../nfl.ts";
+import { findNflTeam, fullName, NFL_LEAGUE } from "../nfl.ts";
+import { gameKey } from "../tracker.ts";
 import type { Env } from "./env.ts";
 import { WEBHOOK_PATH } from "./games.ts";
 import {
@@ -109,20 +114,58 @@ async function bridgeId(accessToken: string): Promise<string> {
 const leagueList = () =>
   Object.entries(LEAGUES).map(([id, path]) => ({ id, name: LEAGUE_NAMES[id] ?? id, sport: sportOf(path) }));
 
-/** Teams to pick from: the built-in table for the NFL (lamp colours), ESPN's list otherwise. */
-async function teamsFor(leagueId: string) {
-  const path = league(leagueId);
-  if (path === NFL_LEAGUE) {
-    return NFL_TEAMS.map((t) => ({ abbreviation: t.abbr, name: fullName(t), colors: t.colors.map((c) => `#${c}`) }));
-  }
-  const teams = await fetchTeams(path);
-  return teams.map((t) => ({
+/** A team as the page shows it: the NFL's lamp colours from the built-in table, ESPN's otherwise. */
+function teamView(path: string, t: FollowedTeam & { score?: number }) {
+  const nfl = path === NFL_LEAGUE ? findNflTeam(t.abbreviation) : undefined;
+  const hex = nfl ? nfl.colors : [t.color, t.alternateColor].filter((c): c is string => Boolean(c));
+  return {
     abbreviation: t.abbreviation,
-    name: t.name,
-    color: t.color,
-    alternateColor: t.alternateColor,
-    colors: [t.color, t.alternateColor].filter((c): c is string => Boolean(c)).map((c) => `#${c}`),
+    name: nfl ? fullName(nfl) : t.name,
+    colors: hex.map((c) => `#${c}`),
+    ...(t.color ? { color: t.color } : {}),
+    ...(t.alternateColor ? { alternateColor: t.alternateColor } : {}),
+    ...(t.score === undefined ? {} : { score: t.score }),
+  };
+}
+
+const side = (g: GameSnapshot, homeAway: TeamSide["homeAway"]) => g.teams.find((t) => t.homeAway === homeAway) ?? g.teams[0]!;
+
+/** The league's games that can be followed now, as the page shows them. */
+async function gamesFor(leagueId: string) {
+  const path = league(leagueId);
+  return followable(await fetchScoreboard(path), Date.now()).map((g) => ({
+    key: gameKey(g),
+    league: leagueId,
+    name: g.name,
+    state: g.state,
+    detail: g.detail,
+    ...(g.startsAt === undefined ? {} : { startsAt: new Date(g.startsAt).toISOString() }),
+    home: teamView(path, side(g, "home")),
+    away: teamView(path, side(g, "away")),
   }));
+}
+
+/** The followed game as the page shows it. */
+const followedView = (game: FollowedGame) => {
+  const path = resolveLeague(game.league);
+  return {
+    key: game.key,
+    league: game.league,
+    name: game.name,
+    ...(game.startsAt === undefined ? {} : { startsAt: new Date(game.startsAt).toISOString() }),
+    home: teamView(path, game.home),
+    away: teamView(path, game.away),
+  };
+};
+
+/** Looks the game `{ league, key }` up on the scoreboard, so only a live or upcoming game can be followed. */
+async function pickGame(b: Record<string, unknown>): Promise<FollowedGame> {
+  if (typeof b.league !== "string" || typeof b.key !== "string") throw new HttpError(400, 'need { "league", "key" }');
+  const leagueId = b.league;
+  const now = Date.now();
+  const game = followable(await fetchScoreboard(league(leagueId)), now).find((g) => gameKey(g) === b.key);
+  if (!game) throw new HttpError(404, "That game is not live or coming up any more.");
+  return followGame(leagueId, game, now);
 }
 
 async function route(req: Request, env: Env): Promise<Response> {
@@ -165,34 +208,48 @@ async function route(req: Request, env: Env): Promise<Response> {
     const user = env.USER.getByName(id);
     const action = `${req.method} ${path}`;
     switch (action) {
-      case "GET /api/me":
+      case "GET /api/me": {
+        const { game, ...rest } = await user.me();
         return json({
           bridge: id,
-          ...(await user.me()),
+          ...rest,
+          ...(game ? { game: followedView(game) } : {}),
           leagues: leagueList(),
           effectKeys: EFFECT_KEYS,
-          defaults: { league: "nfl", teams: [], delaySeconds: 0, effectMode: "signal", effects: DEFAULT_EFFECTS },
+          defaults: { delaySeconds: 0, effectMode: "signal", effects: DEFAULT_EFFECTS },
         });
+      }
       case "GET /api/groups":
         return json(await user.groups());
-      case "GET /api/teams":
-        return json(await teamsFor(url.searchParams.get("league") ?? "nfl"));
+      case "GET /api/games":
+        return json(await gamesFor(url.searchParams.get("league") ?? "nfl"));
       case "PUT /api/settings":
         try {
           return json({ settings: await user.configure(id, await body(req)) });
         } catch (err) {
           throw new HttpError(422, err instanceof Error ? err.message : String(err));
         }
+      case "PUT /api/game": {
+        const game = await pickGame(await body(req));
+        try {
+          return json({ game: followedView(await user.follow(game)) });
+        } catch (err) {
+          throw new HttpError(422, err instanceof Error ? err.message : String(err));
+        }
+      }
+      case "DELETE /api/game":
+        await user.unfollow();
+        return json({ ok: true });
       case "POST /api/test": {
         const b = await body(req);
         const team = (b.team ?? {}) as { abbreviation?: unknown; color?: unknown; alternateColor?: unknown };
         const str = (v: unknown) => (typeof v === "string" ? v : undefined);
+        const abbreviation = str(team.abbreviation);
         return json({
-          result: await user.test(String(b.effect ?? "touchdown"), {
-            abbreviation: str(team.abbreviation) ?? "",
-            color: str(team.color),
-            alternateColor: str(team.alternateColor),
-          }),
+          result: await user.test(
+            String(b.effect ?? "touchdown"),
+            abbreviation ? { abbreviation, color: str(team.color), alternateColor: str(team.alternateColor) } : undefined,
+          ),
         });
       }
       case "DELETE /api/me": {
@@ -218,6 +275,11 @@ async function route(req: Request, env: Env): Promise<Response> {
       case "DELETE ":
         await stub.remove();
         return json({ ok: true });
+      case "PUT /game":
+        return json({ game: await stub.follow(await pickGame(await body(req))) });
+      case "DELETE /game":
+        await stub.unfollow();
+        return json({ ok: true });
       case "PUT /tokens": {
         const b = await body(req);
         if (typeof b.appKey !== "string" || typeof b.tokens !== "object") throw new HttpError(400, 'need { "tokens", "appKey" }');
@@ -226,7 +288,8 @@ async function route(req: Request, env: Env): Promise<Response> {
       }
       case "POST /test": {
         const b = await body(req);
-        return json({ result: await stub.test(String(b.effect ?? "touchdown"), { abbreviation: String(b.team ?? "") }) });
+        const team = typeof b.team === "string" && b.team ? { abbreviation: b.team } : undefined;
+        return json({ result: await stub.test(String(b.effect ?? "touchdown"), team) });
       }
     }
   }

@@ -3,7 +3,7 @@
  * server. Each story sets `parameters.api` to override routes; the rest
  * answer from the fixtures below.
  */
-import type { Group, Me, Settings, Team } from "../api.ts";
+import type { FollowedGame, Game, GameTeam, Group, Me, Settings } from "../api.ts";
 
 /** A route's answer: a JSON body (status 200), `{ status, body }`, or "pending" for a request that never settles. */
 export type FakeReply = unknown;
@@ -25,9 +25,9 @@ export const DEFAULT_EFFECTS: Settings["effects"] = {
   extra_point: effect(false, 0),
   basket: effect(false, 0),
   score: effect(true, 5),
-  game_start: effect(false, 0),
+  game_start: effect(true, 5, "alternating"),
   win: effect(true, 10, "alternating"),
-  draw: effect(false, 0),
+  draw: effect(true, 5, "alternating"),
 };
 
 const LEAGUES: Me["leagues"] = [
@@ -40,24 +40,86 @@ const LEAGUES: Me["leagues"] = [
 ];
 
 export const SAVED: Settings = {
-  league: "nfl",
-  teams: ["LAC", "KC"],
   group: "Living Room",
   delaySeconds: 20,
   effectMode: "signal",
   effects: DEFAULT_EFFECTS,
 };
 
-const me = (settings?: Settings): Me => ({
+const team = (abbreviation: string, name: string, colors: string[], score?: number): GameTeam => ({
+  abbreviation,
+  name,
+  colors: colors.map((c) => `#${c}`),
+  color: colors[0],
+  alternateColor: colors[1],
+  ...(score === undefined ? {} : { score }),
+});
+
+/** Hours from now, as an ISO time, so "Today" and "Tomorrow" stay true whenever the story is opened. */
+const inHours = (hours: number) => new Date(Date.now() + hours * 3600_000).toISOString();
+
+const key = (a: string, b: string) => [a, b].map((t) => t.toLowerCase()).sort().join("-");
+
+const live = (league: string, away: GameTeam, home: GameTeam, detail: string): Game => ({
+  key: key(away.abbreviation, home.abbreviation),
+  league,
+  name: `${away.abbreviation} @ ${home.abbreviation}`,
+  state: "in",
+  detail,
+  startsAt: inHours(-1.5),
+  home,
+  away,
+});
+
+const upcoming = (league: string, away: GameTeam, home: GameTeam, hours: number): Game => ({
+  key: key(away.abbreviation, home.abbreviation),
+  league,
+  name: `${away.abbreviation} @ ${home.abbreviation}`,
+  state: "pre",
+  detail: "Scheduled",
+  startsAt: inHours(hours),
+  home: { ...home, score: 0 },
+  away: { ...away, score: 0 },
+});
+
+export const GAMES: Record<string, Game[]> = {
+  nfl: [
+    live("nfl", team("KC", "Kansas City Chiefs", ["E31837", "FFB81C"], 17), team("LAC", "Los Angeles Chargers", ["0080C6", "FFC20E"], 14), "8:41 - 3rd"),
+    live("nfl", team("DAL", "Dallas Cowboys", ["003594", "FFFFFF"], 3), team("NYG", "New York Giants", ["0B2265", "A71930"], 10), "Halftime"),
+    upcoming("nfl", team("SF", "San Francisco 49ers", ["AA0000", "B3995D"]), team("GB", "Green Bay Packers", ["00703C", "FFB612"]), 3),
+    upcoming("nfl", team("BUF", "Buffalo Bills", ["00338D", "C60C30"]), team("PHI", "Philadelphia Eagles", ["004C54", "FFFFFF"]), 22),
+  ],
+  epl: [
+    live("epl", team("ARS", "Arsenal", ["E20520", "FFFFFF"], 1), team("LIV", "Liverpool", ["D11317", "F6EB61"], 1), "67'"),
+    upcoming("epl", team("TOT", "Tottenham Hotspur", ["132257"]), team("MCI", "Manchester City", ["99C5EA", "FFFFFF"]), 5),
+  ],
+};
+
+const bare = ({ score: _, ...t }: GameTeam): GameTeam => t;
+const followed = ({ key, league, name, startsAt, home, away }: Game): FollowedGame => ({
+  key,
+  league,
+  name,
+  startsAt,
+  home: bare(home),
+  away: bare(away),
+});
+
+/** Following the Chiefs at the Chargers, live. */
+export const FOLLOWING = followed(GAMES.nfl![0]!);
+
+const me = (settings?: Settings, game?: FollowedGame): Me => ({
   bridge: "001788fffe4dbe1a",
   connected: true,
   settings,
+  game,
   leagues: LEAGUES,
   effectKeys: Object.keys(DEFAULT_EFFECTS),
-  defaults: { league: "nfl", teams: [], delaySeconds: 0, effectMode: "signal", effects: DEFAULT_EFFECTS },
+  defaults: { delaySeconds: 0, effectMode: "signal", effects: DEFAULT_EFFECTS },
 });
 
-export const ME_SAVED = me(SAVED);
+export const ME_SAVED = me(SAVED, FOLLOWING);
+export const ME_NOT_FOLLOWING = me(SAVED);
 export const ME_NEW = me(undefined);
 
 export const GROUPS: Group[] = [
@@ -67,40 +129,18 @@ export const GROUPS: Group[] = [
   { name: "TV area", kind: "zone" },
 ];
 
-const team = (abbreviation: string, name: string, ...colors: string[]): Team => ({
-  abbreviation,
-  name,
-  colors: colors.map((c) => `#${c}`),
-  color: colors[0],
-  alternateColor: colors[1],
-});
-
-export const TEAMS: Record<string, Team[]> = {
-  nfl: [
-    team("BUF", "Buffalo Bills", "00338D", "C60C30"),
-    team("DAL", "Dallas Cowboys", "003594", "FFFFFF"),
-    team("GB", "Green Bay Packers", "203731", "FFB612"),
-    team("KC", "Kansas City Chiefs", "E31837", "FFB81C"),
-    team("LAC", "Los Angeles Chargers", "0080C6", "FFC20E"),
-    team("NYG", "New York Giants", "0B2265", "A71930"),
-    team("PHI", "Philadelphia Eagles", "004C54", "A5ACAF"),
-    team("SF", "San Francisco 49ers", "AA0000", "B3995D"),
-  ],
-  epl: [
-    team("ARS", "Arsenal", "E20520", "FFFFFF"),
-    team("CHE", "Chelsea", "034694", "FFFFFF"),
-    team("LIV", "Liverpool", "D11317", "F6EB61"),
-    team("MCI", "Manchester City", "99C5EA", "FFFFFF"),
-    team("TOT", "Tottenham Hotspur", "132257"),
-  ],
-};
-
 /** What a working Worker answers. */
 export const DEFAULT_ROUTES: FakeRoutes = {
   "GET /api/me": ME_SAVED,
   "GET /api/groups": GROUPS,
-  "GET /api/teams": (url: URL) => TEAMS[url.searchParams.get("league") ?? "nfl"] ?? TEAMS.nfl,
+  "GET /api/games": (url: URL) => GAMES[url.searchParams.get("league") ?? "nfl"] ?? [],
   "PUT /api/settings": (_url: URL, body: unknown) => ({ settings: body }),
+  "PUT /api/game": (_url: URL, body: unknown) => {
+    const { league, key } = body as { league: string; key: string };
+    const game = GAMES[league]?.find((g) => g.key === key);
+    return game ? { game: followed(game) } : { status: 404, body: { error: "That game is not live or coming up any more." } };
+  },
+  "DELETE /api/game": { ok: true },
   "POST /api/test": { result: 'Played "touchdown" on Living Room for 10s' },
   "DELETE /api/me": { ok: true },
   "POST /auth/signout": { ok: true },
