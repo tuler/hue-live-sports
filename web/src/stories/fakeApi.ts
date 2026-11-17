@@ -38,13 +38,24 @@ const logo = (light: string, dark: string) => {
 const usLogo = (id: string) => logo(`/i/teamlogos/leagues/500/${id}.png`, `/i/teamlogos/leagues/500-dark/${id}.png`);
 const soccerLogo = (n: number) => logo(`/i/leaguelogos/soccer/500/${n}.png`, `/i/leaguelogos/soccer/500-dark/${n}.png`);
 
+const ncaa = "/redesign/assets/img/icons/NCAASports_Football.png";
+
+/** The Worker's full list, in its order. */
 const LEAGUES: Me["leagues"] = [
   { id: "nfl", name: "NFL", sport: "football", logo: usLogo("nfl") },
+  { id: "ncaaf", name: "College football", sport: "football", logo: logo(ncaa, ncaa) },
   { id: "nba", name: "NBA", sport: "basketball", logo: usLogo("nba") },
-  { id: "mlb", name: "MLB", sport: "baseball", logo: usLogo("mlb") },
+  { id: "wnba", name: "WNBA", sport: "basketball", logo: usLogo("wnba") },
   { id: "nhl", name: "NHL", sport: "hockey", logo: usLogo("nhl") },
+  { id: "mlb", name: "MLB", sport: "baseball", logo: usLogo("mlb") },
+  { id: "mls", name: "MLS", sport: "soccer", logo: soccerLogo(19) },
   { id: "epl", name: "Premier League", sport: "soccer", logo: soccerLogo(23) },
+  { id: "laliga", name: "LaLiga", sport: "soccer", logo: soccerLogo(15) },
+  { id: "bundesliga", name: "Bundesliga", sport: "soccer", logo: soccerLogo(10) },
+  { id: "seriea", name: "Serie A", sport: "soccer", logo: soccerLogo(12) },
+  { id: "ligue1", name: "Ligue 1", sport: "soccer", logo: soccerLogo(9) },
   { id: "brasileirao", name: "Brasileirão", sport: "soccer", logo: soccerLogo(85) },
+  { id: "ucl", name: "Champions League", sport: "soccer", logo: soccerLogo(2) },
 ];
 
 export const SAVED: Settings = {
