@@ -6,20 +6,22 @@ It polls ESPN's public scoreboard, works out what happened from the change in sc
 
 ## Setup
 
-Needs Node 22+, pnpm, and a Hue Bridge on the same network.
+Needs [Bun](https://bun.sh) 1.2+ and a Hue Bridge on the same network.
 
 ```sh
-pnpm install
+bun install
 cp .env.example .env
 cp config.example.json config.json
 
-pnpm dev discover        # find the bridge, put its IP in .env
-pnpm dev pair            # press the bridge's link button first, then put the key in .env
-pnpm dev groups          # room and zone names for config.json
-pnpm dev game            # check that your team's game is found
-pnpm dev test us.touchdown
-pnpm dev run             # add --dry-run to log events without touching the lights
+bun start discover        # find the bridge, put its IP in .env
+bun start pair            # press the bridge's link button first, then put the key in .env
+bun start groups          # room and zone names for config.json
+bun start game            # check that your team's game is found
+bun start test us.touchdown
+bun start run             # add --dry-run to log events without touching the lights
 ```
+
+Bun runs the TypeScript directly and loads `.env` itself, so there is no build step. `bun run compile` produces a standalone binary at `dist/hue-live-sports` for a machine without Bun.
 
 ## Config
 
@@ -47,7 +49,8 @@ Effect keys are `us.<kind>` and `them.<kind>`, falling back to `us.score` and `t
 ## Development
 
 ```sh
-pnpm typecheck
-pnpm test
-pnpm build
+bun run typecheck
+bun test
 ```
+
+The Hue client tests start a local HTTPS stand-in for the bridge and need `openssl` to mint its certificate; they are skipped without it.

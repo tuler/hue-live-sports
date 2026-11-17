@@ -4,8 +4,7 @@
  */
 import { readFileSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
-import { Agent, fetch as bridgeFetch } from "undici";
-import type { XY } from "./color.js";
+import type { XY } from "./color.ts";
 
 export interface BridgeOptions {
   ip: string;
@@ -45,31 +44,29 @@ interface Resource {
 }
 
 export class HueBridge {
-  private readonly agent: Agent;
+  private readonly tls: NonNullable<BunFetchRequestInit["tls"]>;
 
   constructor(private readonly options: BridgeOptions) {
     // The bridge serves a certificate issued by Signify's private CA for its
     // bridge id, not its IP, so the default verification cannot pass.
     const { caFile, bridgeId } = options;
-    this.agent = new Agent({
-      connect: caFile
-        ? {
-            ca: readFileSync(caFile),
-            checkServerIdentity: (_host, cert) => {
-              const cn = String(cert.subject.CN ?? "");
-              return !bridgeId || cn.toLowerCase() === bridgeId.toLowerCase()
-                ? undefined
-                : new Error(`Bridge certificate is for "${cn}", expected ${bridgeId}`);
-            },
-          }
-        : { rejectUnauthorized: false },
-    });
+    this.tls = caFile
+      ? {
+          ca: readFileSync(caFile, "utf8"),
+          checkServerIdentity: (_host, cert) => {
+            const cn = String(cert.subject.CN ?? "");
+            return !bridgeId || cn.toLowerCase() === bridgeId.toLowerCase()
+              ? undefined
+              : new Error(`Bridge certificate is for "${cn}", expected ${bridgeId}`);
+          },
+        }
+      : { rejectUnauthorized: false };
   }
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const res = await bridgeFetch(`https://${this.options.ip}${path}`, {
+    const res = await fetch(`https://${this.options.ip}${path}`, {
       method,
-      dispatcher: this.agent,
+      tls: this.tls,
       signal: AbortSignal.timeout(8_000),
       headers: {
         "content-type": "application/json",
@@ -183,10 +180,6 @@ export class HueBridge {
       else if (l.color) body.color = { xy: l.color.xy };
       return { id: l.id, body };
     });
-  }
-
-  async close(): Promise<void> {
-    await this.agent.close();
   }
 }
 

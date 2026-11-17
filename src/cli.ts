@@ -1,10 +1,10 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 import { parseArgs } from "node:util";
-import { lampColors } from "./color.js";
-import { DEFAULT_CONFIG_PATH, effectFor, loadConfig, loadEnv } from "./config.js";
-import { fetchScoreboard, findGame, isTeam, LEAGUES, resolveLeague } from "./espn.js";
-import { discoverBridges, HueBridge } from "./hue.js";
-import { play, run } from "./runner.js";
+import { lampColors } from "./color.ts";
+import { DEFAULT_CONFIG_PATH, effectFor, loadConfig } from "./config.ts";
+import { fetchScoreboard, findGame, isTeam, LEAGUES, resolveLeague } from "./espn.ts";
+import { discoverBridges, HueBridge } from "./hue.ts";
+import { play, run } from "./runner.ts";
 
 const USAGE = `hue-live-sports <command> [options]
 
@@ -51,7 +51,6 @@ async function main(): Promise<void> {
     console.log(USAGE);
     return;
   }
-  loadEnv();
 
   switch (command) {
     case "discover": {
@@ -61,21 +60,11 @@ async function main(): Promise<void> {
       return;
     }
     case "pair": {
-      const hue = bridge(values.ip, false);
-      try {
-        console.log(`Add this to .env:\nHUE_APP_KEY=${await hue.pair()}`);
-      } finally {
-        await hue.close();
-      }
+      console.log(`Add this to .env:\nHUE_APP_KEY=${await bridge(values.ip, false).pair()}`);
       return;
     }
     case "groups": {
-      const hue = bridge(values.ip, true);
-      try {
-        for (const g of await hue.groups()) console.log(`${g.kind}\t${g.name}`);
-      } finally {
-        await hue.close();
-      }
+      for (const g of await bridge(values.ip, true).groups()) console.log(`${g.kind}\t${g.name}`);
       return;
     }
     case "game": {
@@ -102,13 +91,9 @@ async function main(): Promise<void> {
       const colors = lampColors(...(effect.colors ?? [side?.color, side?.alternateColor]));
       if (!effect.colors && !side) console.log("No game listed, so team colours are unknown: flashing white.");
       const hue = bridge(values.ip, true);
-      try {
-        const group = await hue.findGroup(config.group);
-        console.log(`Playing "${arg}" on ${group.name} for ${effect.seconds}s`);
-        await play({ bridge: hue, group }, config, effect, colors);
-      } finally {
-        await hue.close();
-      }
+      const group = await hue.findGroup(config.group);
+      console.log(`Playing "${arg}" on ${group.name} for ${effect.seconds}s`);
+      await play({ bridge: hue, group }, config, effect, colors);
       return;
     }
     case "run": {
@@ -120,11 +105,7 @@ async function main(): Promise<void> {
         return;
       }
       const hue = bridge(values.ip, true);
-      try {
-        await run(config, { bridge: hue, group: await hue.findGroup(config.group) }, stop.signal);
-      } finally {
-        await hue.close();
-      }
+      await run(config, { bridge: hue, group: await hue.findGroup(config.group) }, stop.signal);
       return;
     }
     default:

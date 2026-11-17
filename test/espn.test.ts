@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
-import { findGame, parseScoreboard, resolveLeague, sportOf } from "../src/espn.js";
-import { scoreboard } from "./fixture.js";
+import { describe, expect, it } from "bun:test";
+import { findGame, parseScoreboard, resolveLeague, sportOf } from "../src/espn.ts";
+import { scoreboard } from "./fixture.ts";
 
 describe("espn", () => {
   it("resolves aliases and raw paths", () => {

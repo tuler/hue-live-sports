@@ -1,10 +1,10 @@
 import { setTimeout as sleep } from "node:timers/promises";
-import { lampColors } from "./color.js";
-import { effectFor, type Config, type Effect } from "./config.js";
-import { fetchScoreboard, findGame, isTeam, resolveLeague, type GameSnapshot } from "./espn.js";
-import { describe, detectEvents, eventKeys, type SportsEvent } from "./events.js";
-import type { HueBridge, LightGroup } from "./hue.js";
-import type { XY } from "./color.js";
+import { lampColors } from "./color.ts";
+import { effectFor, type Config, type Effect } from "./config.ts";
+import { fetchScoreboard, findGame, isTeam, resolveLeague, type GameSnapshot } from "./espn.ts";
+import { describe, detectEvents, eventKeys, type SportsEvent } from "./events.ts";
+import type { HueBridge, LightGroup } from "./hue.ts";
+import type { XY } from "./color.ts";
 
 export interface Lights {
   bridge: HueBridge;

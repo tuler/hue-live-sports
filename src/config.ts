@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import type { Signal } from "./hue.js";
+import type { Signal } from "./hue.ts";
 
 export interface Effect {
   enabled: boolean;
@@ -48,10 +48,6 @@ export const DEFAULT_EFFECTS: Record<string, Effect> = {
 };
 
 export const DEFAULT_CONFIG_PATH = "config.json";
-
-export function loadEnv(path = ".env"): void {
-  if (existsSync(path)) process.loadEnvFile(path);
-}
 
 export function loadConfig(path = DEFAULT_CONFIG_PATH): Config {
   if (!existsSync(path)) {

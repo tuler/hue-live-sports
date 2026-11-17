@@ -1,4 +1,4 @@
-import { isTeam, type GameSnapshot, type Sport, type TeamSide } from "./espn.js";
+import { isTeam, type GameSnapshot, type Sport, type TeamSide } from "./espn.ts";
 
 export type ScoreKind =
   | "touchdown"
