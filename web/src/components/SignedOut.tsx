@@ -9,10 +9,10 @@ export function SignedOut() {
         <Logo size={56} />
       </Center>
       <Title order={2} mb="xs">
-        Your lights, in your team's colours
+        Make your living room part of the game
       </Title>
       <Text c="dimmed" maw={440} mx="auto" mb="xl">
-        Connect your Philips Hue Bridge and pick the game you're watching. Every touchdown, goal and win flashes the room you choose, live.
+        Connect your Philips Hue Bridge and pick the game you're watching. Every touchdown, goal and win flashes the room you choose in the scoring team's colours, live.
       </Text>
       <Button component="a" href="/auth/start" size="lg">
         Connect Hue
