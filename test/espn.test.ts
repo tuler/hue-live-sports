@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { fetchScoreboard, parseScoreboard, resolveLeague, sportOf } from "../src/espn.ts";
+import { fetchScoreboard, leagueLogos, LEAGUES, parseScoreboard, resolveLeague, sportOf } from "../src/espn.ts";
 import { board, scoreboard } from "./fixture.ts";
 
 describe("espn", () => {
@@ -37,5 +37,21 @@ describe("espn", () => {
     const [game] = parseScoreboard(board([{ id: "1", state: "pre", home: ["NYG", 0], away: ["DAL", 0], startsAt: at }]), "football/nfl");
     expect(game?.startsAt).toBe(at);
     expect(parseScoreboard(scoreboard("pre", 0, 0), "football/nfl")[0]?.startsAt).toBeUndefined();
+  });
+});
+
+describe("leagueLogos", () => {
+  it("has light and dark logos for every league alias", () => {
+    for (const alias of Object.keys(LEAGUES)) {
+      const logos = leagueLogos(alias);
+      expect(logos, alias).toBeDefined();
+      expect(logos!.light).toStartWith("https://a.espncdn.com/combiner/i?img=/");
+      expect(logos!.dark).toStartWith("https://a.espncdn.com/combiner/i?img=/");
+    }
+  });
+
+  it("resizes through ESPN's combiner and knows nothing of raw paths", () => {
+    expect(leagueLogos("nfl", 40)?.light).toBe("https://a.espncdn.com/combiner/i?img=/i/teamlogos/leagues/500/nfl.png&w=40&h=40&transparent=true");
+    expect(leagueLogos("soccer/eng.1")).toBeUndefined();
   });
 });

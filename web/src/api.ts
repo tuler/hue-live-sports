@@ -21,6 +21,8 @@ export interface League {
   id: string;
   name: string;
   sport: "football" | "soccer" | "hockey" | "baseball" | "basketball" | "other";
+  /** Logo image URLs for light and dark backgrounds, if the league has one. */
+  logo?: { light: string; dark: string };
 }
 
 export interface Me {

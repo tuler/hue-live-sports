@@ -70,6 +70,41 @@ export const LEAGUE_NAMES: Record<string, string> = {
   ucl: "Champions League",
 };
 
+/**
+ * ESPN's league logos for the aliases in `LEAGUES`: image paths for light and dark backgrounds, as the
+ * scoreboard's `leagues[0].logos` lists them. College football has one generic icon for both.
+ */
+const LEAGUE_LOGOS: Record<string, { light: string; dark: string }> = {
+  nfl: { light: "/i/teamlogos/leagues/500/nfl.png", dark: "/i/teamlogos/leagues/500-dark/nfl.png" },
+  ncaaf: { light: "/redesign/assets/img/icons/NCAASports_Football.png", dark: "/redesign/assets/img/icons/NCAASports_Football.png" },
+  nba: { light: "/i/teamlogos/leagues/500/nba.png", dark: "/i/teamlogos/leagues/500-dark/nba.png" },
+  wnba: { light: "/i/teamlogos/leagues/500/wnba.png", dark: "/i/teamlogos/leagues/500-dark/wnba.png" },
+  nhl: { light: "/i/teamlogos/leagues/500/nhl.png", dark: "/i/teamlogos/leagues/500-dark/nhl.png" },
+  mlb: { light: "/i/teamlogos/leagues/500/mlb.png", dark: "/i/teamlogos/leagues/500-dark/mlb.png" },
+  mls: { light: "/i/leaguelogos/soccer/500/19.png", dark: "/i/leaguelogos/soccer/500-dark/19.png" },
+  epl: { light: "/i/leaguelogos/soccer/500/23.png", dark: "/i/leaguelogos/soccer/500-dark/23.png" },
+  laliga: { light: "/i/leaguelogos/soccer/500/15.png", dark: "/i/leaguelogos/soccer/500-dark/15.png" },
+  bundesliga: { light: "/i/leaguelogos/soccer/500/10.png", dark: "/i/leaguelogos/soccer/500-dark/10.png" },
+  seriea: { light: "/i/leaguelogos/soccer/500/12.png", dark: "/i/leaguelogos/soccer/500-dark/12.png" },
+  ligue1: { light: "/i/leaguelogos/soccer/500/9.png", dark: "/i/leaguelogos/soccer/500-dark/9.png" },
+  brasileirao: { light: "/i/leaguelogos/soccer/500/85.png", dark: "/i/leaguelogos/soccer/500-dark/85.png" },
+  ucl: { light: "/i/leaguelogos/soccer/500/2.png", dark: "/i/leaguelogos/soccer/500-dark/2.png" },
+};
+
+/** The CDN the logos come from; the settings page's Content-Security-Policy allows images from it. */
+export const ESPN_IMAGE_ORIGIN = "https://a.espncdn.com";
+
+/**
+ * Logo URLs for a league alias, resized by ESPN's image combiner to `size` pixels square
+ * (an 80px logo is ~4 KB; the originals are 500px and up to ~56 KB).
+ */
+export function leagueLogos(alias: string, size = 80): { light: string; dark: string } | undefined {
+  const logos = LEAGUE_LOGOS[alias];
+  if (!logos) return undefined;
+  const url = (img: string) => `${ESPN_IMAGE_ORIGIN}/combiner/i?img=${img}&w=${size}&h=${size}&transparent=true`;
+  return { light: url(logos.light), dark: url(logos.dark) };
+}
+
 /** Accepts an alias ("nfl") or a raw ESPN path ("soccer/eng.1"). */
 export function resolveLeague(league: string): string {
   const key = league.trim().toLowerCase();

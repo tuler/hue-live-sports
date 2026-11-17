@@ -25,7 +25,7 @@
  *   POST /users/<id>/test, GET /leagues/<league>
  */
 import { DEFAULT_EFFECTS } from "../config.ts";
-import { fetchScoreboard, LEAGUE_NAMES, LEAGUES, resolveLeague, sportOf, type GameSnapshot, type TeamSide } from "../espn.ts";
+import { fetchScoreboard, LEAGUE_NAMES, leagueLogos, LEAGUES, resolveLeague, sportOf, type GameSnapshot, type TeamSide } from "../espn.ts";
 import { EFFECT_KEYS } from "../events.ts";
 import { followable, followGame, type FollowedGame, type FollowedTeam } from "../follow.ts";
 import { HueRemoteAuth, type RemoteTokens } from "../hue-remote.ts";
@@ -112,7 +112,7 @@ async function bridgeId(accessToken: string): Promise<string> {
 }
 
 const leagueList = () =>
-  Object.entries(LEAGUES).map(([id, path]) => ({ id, name: LEAGUE_NAMES[id] ?? id, sport: sportOf(path) }));
+  Object.entries(LEAGUES).map(([id, path]) => ({ id, name: LEAGUE_NAMES[id] ?? id, sport: sportOf(path), logo: leagueLogos(id) }));
 
 /** A team as the page shows it: the NFL's lamp colours from the built-in table, ESPN's otherwise. */
 function teamView(path: string, t: FollowedTeam & { score?: number }) {

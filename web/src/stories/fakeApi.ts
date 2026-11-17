@@ -30,13 +30,21 @@ export const DEFAULT_EFFECTS: Settings["effects"] = {
   draw: effect(true, 5, "alternating"),
 };
 
+/** ESPN's logo URLs, as `leagueLogos` in src/espn.ts builds them. */
+const logo = (light: string, dark: string) => {
+  const url = (img: string) => `https://a.espncdn.com/combiner/i?img=${img}&w=80&h=80&transparent=true`;
+  return { light: url(light), dark: url(dark) };
+};
+const usLogo = (id: string) => logo(`/i/teamlogos/leagues/500/${id}.png`, `/i/teamlogos/leagues/500-dark/${id}.png`);
+const soccerLogo = (n: number) => logo(`/i/leaguelogos/soccer/500/${n}.png`, `/i/leaguelogos/soccer/500-dark/${n}.png`);
+
 const LEAGUES: Me["leagues"] = [
-  { id: "nfl", name: "NFL", sport: "football" },
-  { id: "nba", name: "NBA", sport: "basketball" },
-  { id: "mlb", name: "MLB", sport: "baseball" },
-  { id: "nhl", name: "NHL", sport: "hockey" },
-  { id: "epl", name: "Premier League", sport: "soccer" },
-  { id: "brasileirao", name: "Brasileirão", sport: "soccer" },
+  { id: "nfl", name: "NFL", sport: "football", logo: usLogo("nfl") },
+  { id: "nba", name: "NBA", sport: "basketball", logo: usLogo("nba") },
+  { id: "mlb", name: "MLB", sport: "baseball", logo: usLogo("mlb") },
+  { id: "nhl", name: "NHL", sport: "hockey", logo: usLogo("nhl") },
+  { id: "epl", name: "Premier League", sport: "soccer", logo: soccerLogo(23) },
+  { id: "brasileirao", name: "Brasileirão", sport: "soccer", logo: soccerLogo(85) },
 ];
 
 export const SAVED: Settings = {

@@ -1,8 +1,9 @@
-import { Alert, Button, Select, Skeleton, Stack, Text } from "@mantine/core";
+import { Alert, Button, Group, Select, Skeleton, Stack, Text } from "@mantine/core";
 import { useEffect, useState } from "react";
 import { api, type FollowedGame, type Game, type League } from "../api.ts";
 import { errorMessage, type Load } from "../load.ts";
 import { GameCard } from "./GameCard.tsx";
+import { LeagueLogo } from "./LeagueLogo.tsx";
 
 /** Live scores move, so the list is fetched again this often while the page is open. */
 const REFRESH_MS = 30_000;
@@ -41,7 +42,8 @@ export function GamePicker({ leagues, league, onLeague, followed, busy, onFollow
   const list = games.state === "ready" ? games.value : [];
   const live = followed && list.find((g) => g.key === followed.key && g.league === followed.league);
   const others = list.filter((g) => g !== live);
-  const leagueName = leagues.find((l) => l.id === league)?.name ?? league;
+  const current = leagues.find((l) => l.id === league);
+  const leagueName = current?.name ?? league;
 
   return (
     <Stack gap="md">
@@ -60,6 +62,13 @@ export function GamePicker({ leagues, league, onLeague, followed, busy, onFollow
         size="md"
         label={followed ? "Or switch to another game" : "League"}
         data={leagues.map((l) => ({ value: l.id, label: l.name }))}
+        leftSection={<LeagueLogo logo={current?.logo} />}
+        renderOption={({ option }) => (
+          <Group gap="sm" wrap="nowrap">
+            <LeagueLogo logo={leagues.find((l) => l.id === option.value)?.logo} />
+            {option.label}
+          </Group>
+        )}
         value={league}
         onChange={(v) => v && onLeague(v)}
         allowDeselect={false}
