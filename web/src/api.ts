@@ -25,6 +25,15 @@ export interface League {
   logo?: { light: string; dark: string };
 }
 
+/** Games open to follow in one league: live now, and starting within a day. */
+export interface LeagueCount {
+  live: number;
+  upcoming: number;
+}
+
+/** Per league id; `null` where the server could not read that league's scoreboard. */
+export type LeagueCounts = Record<string, LeagueCount | null>;
+
 export interface Me {
   bridge: string;
   connected: boolean;
@@ -97,6 +106,7 @@ export const api = {
   me: () => call<Me>("GET", "/api/me"),
   groups: () => call<Group[]>("GET", "/api/groups"),
   games: (league: string) => call<Game[]>("GET", `/api/games?league=${encodeURIComponent(league)}`),
+  leagueCounts: () => call<LeagueCounts>("GET", "/api/leagues/counts"),
   save: (settings: Settings) => call<{ settings: Settings }>("PUT", "/api/settings", settings),
   follow: (game: Pick<Game, "league" | "key">) => call<{ game: FollowedGame }>("PUT", "/api/game", { league: game.league, key: game.key }),
   unfollow: () => call<{ ok: true }>("DELETE", "/api/game"),

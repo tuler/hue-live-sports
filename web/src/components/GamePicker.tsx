@@ -1,12 +1,19 @@
 import { Alert, Button, Skeleton, Stack, Text } from "@mantine/core";
-import { useEffect, useState } from "react";
-import { api, type FollowedGame, type Game, type League } from "../api.ts";
+import { useEffect, useRef, useState } from "react";
+import { api, type FollowedGame, type Game, type League, type LeagueCounts } from "../api.ts";
 import { errorMessage, type Load } from "../load.ts";
 import { GameCard } from "./GameCard.tsx";
 import { LeaguePicker } from "./LeaguePicker.tsx";
 
 /** Live scores move, so the list is fetched again this often while the page is open. */
 const REFRESH_MS = 30_000;
+/** Which leagues have games changes slowly, and the server keeps its answer a minute anyway. */
+const COUNTS_REFRESH_MS = 3 * 60_000;
+
+const hasGames = (counts: LeagueCounts, id: string) => {
+  const c = counts[id];
+  return c != null && c.live + c.upcoming > 0;
+};
 
 interface Props {
   leagues: League[];
@@ -22,6 +29,30 @@ interface Props {
 /** The followed game, if any, then the league's live and upcoming games to pick from. */
 export function GamePicker({ leagues, league, onLeague, followed, busy, onFollow, onStop }: Props) {
   const [games, setGames] = useState<Load<Game[]>>({ state: "loading" });
+  const [counts, setCounts] = useState<LeagueCounts>();
+  const openedOnGames = useRef(false);
+
+  useEffect(() => {
+    let current = true;
+    // Without counts nothing is dimmed, so a failure here costs nothing.
+    const load = () => api.leagueCounts().then((value) => current && setCounts(value), () => {});
+    void load();
+    const timer = setInterval(() => document.visibilityState === "visible" && void load(), COUNTS_REFRESH_MS);
+    return () => {
+      current = false;
+      clearInterval(timer);
+    };
+  }, []);
+
+  // Once, when the counts first arrive: don't open on a league with nothing to follow while another has
+  // games. Prefer one with a game live now. Not when following a game: its league is the one to show.
+  useEffect(() => {
+    if (!counts || openedOnGames.current) return;
+    openedOnGames.current = true;
+    if (followed || counts[league] == null || hasGames(counts, league)) return;
+    const next = leagues.find((l) => (counts[l.id]?.live ?? 0) > 0) ?? leagues.find((l) => hasGames(counts, l.id));
+    if (next) onLeague(next.id);
+  }, [counts]);
 
   useEffect(() => {
     setGames({ state: "loading" });
@@ -70,6 +101,8 @@ export function GamePicker({ leagues, league, onLeague, followed, busy, onFollow
         value={league}
         onChange={onLeague}
         label={followed ? "Or switch to another game" : "League"}
+        counts={counts}
+        keep={followed ? [followed.league] : []}
       />
       {games.state === "loading" && (
         <Stack gap="sm" aria-label="Loading games">

@@ -3,7 +3,7 @@
  * server. Each story sets `parameters.api` to override routes; the rest
  * answer from the fixtures below.
  */
-import type { FollowedGame, Game, GameTeam, Group, Me, Settings } from "../api.ts";
+import type { FollowedGame, Game, GameTeam, Group, LeagueCounts, Me, Settings } from "../api.ts";
 
 /** A route's answer: a JSON body (status 200), `{ status, body }`, or "pending" for a request that never settles. */
 export type FakeReply = unknown;
@@ -108,6 +108,9 @@ export const GAMES: Record<string, Game[]> = {
     upcoming("nfl", team("SF", "San Francisco 49ers", ["AA0000", "B3995D"]), team("GB", "Green Bay Packers", ["00703C", "FFB612"]), 3),
     upcoming("nfl", team("BUF", "Buffalo Bills", ["00338D", "C60C30"]), team("PHI", "Philadelphia Eagles", ["004C54", "FFFFFF"]), 22),
   ],
+  nba: [
+    upcoming("nba", team("BOS", "Boston Celtics", ["007A33", "BA9653"]), team("LAL", "Los Angeles Lakers", ["552583", "FDB927"]), 8),
+  ],
   epl: [
     live("epl", team("ARS", "Arsenal", ["E20520", "FFFFFF"], 1), team("LIV", "Liverpool", ["D11317", "F6EB61"], 1), "67'"),
     upcoming("epl", team("TOT", "Tottenham Hotspur", ["132257"]), team("MCI", "Manchester City", ["99C5EA", "FFFFFF"]), 5),
@@ -148,11 +151,24 @@ export const GROUPS: Group[] = [
   { name: "TV area", kind: "zone" },
 ];
 
+/**
+ * Open games per league, as `GET /api/leagues/counts` answers: from `GAMES`, so the picker and the
+ * lists agree. Ligue 1 stands for a league whose scoreboard could not be read.
+ */
+export const LEAGUE_COUNTS: LeagueCounts = Object.fromEntries(
+  LEAGUES.map((l) => {
+    const games = GAMES[l.id] ?? [];
+    const live = games.filter((g) => g.state === "in").length;
+    return [l.id, l.id === "ligue1" ? null : { live, upcoming: games.length - live }];
+  }),
+);
+
 /** What a working Worker answers. */
 export const DEFAULT_ROUTES: FakeRoutes = {
   "GET /api/me": ME_SAVED,
   "GET /api/groups": GROUPS,
   "GET /api/games": (url: URL) => GAMES[url.searchParams.get("league") ?? "nfl"] ?? [],
+  "GET /api/leagues/counts": LEAGUE_COUNTS,
   "PUT /api/settings": (_url: URL, body: unknown) => ({ settings: body }),
   "PUT /api/game": (_url: URL, body: unknown) => {
     const { league, key } = body as { league: string; key: string };

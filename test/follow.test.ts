@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { parseScoreboard } from "../src/espn.ts";
 import { detectEvents } from "../src/events.ts";
-import { endsGame, followable, followGame, FOLLOW_MS, forGame, hasLapsed, UPCOMING_MS } from "../src/follow.ts";
+import { countFollowable, endsGame, followable, followGame, FOLLOW_MS, forGame, hasLapsed, UPCOMING_MS } from "../src/follow.ts";
 import { board, scoreboard, type FakeGame } from "./fixture.ts";
 
 const snap = (state: "pre" | "in" | "post", home: number, away: number) =>
@@ -24,6 +24,12 @@ describe("followable", () => {
   it("leaves out finals and games more than a day off, but keeps a game with no start time", () => {
     expect(ids([game("final", "post", -3), game("far", "pre", 25), game("tbd", "pre")])).toEqual(["tbd"]);
     expect(UPCOMING_MS).toBe(24 * 3600_000);
+  });
+
+  it("counts live and upcoming games by the same rule", () => {
+    const games = [game("live", "in", -1), game("soon", "pre", 1), game("far", "pre", 25), game("final", "post", -3)];
+    expect(countFollowable(parseScoreboard(board(games), "soccer/eng.1"), now)).toEqual({ live: 1, upcoming: 1 });
+    expect(countFollowable([], now)).toEqual({ live: 0, upcoming: 0 });
   });
 });
 

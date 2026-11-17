@@ -39,6 +39,18 @@ export function followable(games: GameSnapshot[], now: number): GameSnapshot[] {
   return [...live, ...upcoming];
 }
 
+/** How many of a league's games can be followed at `now`, by the same rule as `followable`. */
+export interface FollowableCount {
+  live: number;
+  upcoming: number;
+}
+
+export function countFollowable(games: GameSnapshot[], now: number): FollowableCount {
+  const open = followable(games, now);
+  const live = open.filter((g) => g.state === "in").length;
+  return { live, upcoming: open.length - live };
+}
+
 const team = (t: TeamSide | undefined): FollowedTeam => ({
   abbreviation: t?.abbreviation ?? "",
   name: t?.name ?? t?.abbreviation ?? "",

@@ -6,8 +6,8 @@ import { failWith, FOLLOWING, ME_SAVED } from "../stories/fakeApi.ts";
 import { GamePicker } from "./GamePicker.tsx";
 
 /** Holds the league and the followed game, so picking and stopping can be played with. */
-function Stateful({ followed: initial }: { followed?: FollowedGame }) {
-  const [league, setLeague] = useState(initial?.league ?? "nfl");
+function Stateful({ followed: initial, league: start = "nfl" }: { followed?: FollowedGame; league?: string }) {
+  const [league, setLeague] = useState(initial?.league ?? start);
   const [followed, setFollowed] = useState(initial);
   return (
     <GamePicker
@@ -25,7 +25,7 @@ const meta = {
   title: "Components/GamePicker",
   component: GamePicker,
   args: { leagues: ME_SAVED.leagues, league: "nfl", onLeague: () => {}, onFollow: () => {}, onStop: () => {} },
-  render: (args) => <Stateful followed={args.followed} />,
+  render: (args) => <Stateful followed={args.followed} league={args.league} />,
   decorators: [(Story) => <div style={{ maxWidth: 560 }}>{Story()}</div>],
 } satisfies Meta<typeof GamePicker>;
 
@@ -43,8 +43,7 @@ export const FollowingAnotherLeague: Story = {
   args: { followed: FOLLOWING },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(await canvas.findByLabelText("Or switch to another game"));
-    await userEvent.click(await within(document.body).findByRole("option", { name: "Premier League" }));
+    await userEvent.click(await canvas.findByRole("radio", { name: /Premier League/ }));
     await expect(await canvas.findByText("Arsenal")).toBeInTheDocument();
     await expect(canvas.getByText("Following")).toBeInTheDocument();
   },
@@ -54,10 +53,35 @@ export const FollowingAnotherLeague: Story = {
 export const PickAGame: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(await canvas.findByRole("button", { name: "Follow San Francisco 49ers at Green Bay Packers" }));
+    await userEvent.click(await canvas.findByRole("button", { name: /San Francisco 49ers/ }));
     await expect(await canvas.findByText("Following")).toBeInTheDocument();
     await expect(canvas.getByRole("button", { name: "Stop" })).toBeInTheDocument();
   },
+};
+
+/** Leagues with nothing to follow are dimmed and can't be picked; a red dot marks leagues with a game live. */
+export const EmptyLeaguesDimmed: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole("radio", { name: /MLB.*no games today/ })).toBeDisabled();
+    await expect(canvas.getByRole("radio", { name: /Premier League.*live now/ })).toBeEnabled();
+    // Ligue 1's scoreboard could not be read, so it is left alone.
+    await expect(canvas.getByRole("radio", { name: "Ligue 1" })).toBeEnabled();
+  },
+};
+
+/** Opened on a league with no games (say, remembered from last season): moves to one with a game live. */
+export const OpensOnALeagueWithGames: Story = {
+  args: { league: "mlb" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole("radio", { name: /NFL/, checked: true })).toBeInTheDocument();
+  },
+};
+
+/** Without counts (the request failed), every league can be picked as before. */
+export const CountsUnavailable: Story = {
+  parameters: { api: { "GET /api/leagues/counts": failWith(500, "boom") } },
 };
 
 export const NoGames: Story = { parameters: { api: { "GET /api/games": [] } } };

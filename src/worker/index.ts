@@ -14,6 +14,7 @@
  *   GET  /api/me                   settings, the followed game, defaults and the league list
  *   GET  /api/groups               rooms and zones on the bridge
  *   GET  /api/games?league=nfl     games to pick from: live, and starting within a day
+ *   GET  /api/leagues/counts       { <league>: { live, upcoming } | null } for every league, kept a minute
  *   PUT  /api/settings             save settings
  *   PUT  /api/game                 follow one game, { "league", "key" }, until its final
  *   DELETE /api/game               stop following
@@ -33,6 +34,7 @@ import { findNflTeam, fullName, NFL_LEAGUE } from "../nfl.ts";
 import { gameKey } from "../tracker.ts";
 import type { Env } from "./env.ts";
 import { WEBHOOK_PATH } from "./games.ts";
+import { leagueCounter } from "./league-counts.ts";
 import {
   checkState,
   clearCookie,
@@ -110,6 +112,9 @@ async function bridgeId(accessToken: string): Promise<string> {
   }
   return config.bridgeid.toLowerCase();
 }
+
+/** Open games per league, shared by every request this isolate serves. */
+const leagueCounts = leagueCounter();
 
 const leagueList = () =>
   Object.entries(LEAGUES).map(([id, path]) => ({ id, name: LEAGUE_NAMES[id] ?? id, sport: sportOf(path), logo: leagueLogos(id) }));
@@ -223,6 +228,8 @@ async function route(req: Request, env: Env): Promise<Response> {
         return json(await user.groups());
       case "GET /api/games":
         return json(await gamesFor(url.searchParams.get("league") ?? "nfl"));
+      case "GET /api/leagues/counts":
+        return json(await leagueCounts());
       case "PUT /api/settings":
         try {
           return json({ settings: await user.configure(id, await body(req)) });

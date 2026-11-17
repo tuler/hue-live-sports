@@ -28,7 +28,7 @@ export const FollowAGame: Story = {
   args: { me: ME_NEW },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(await canvas.findByRole("button", { name: "Follow Dallas Cowboys at New York Giants" }));
+    await userEvent.click(await canvas.findByRole("button", { name: /Dallas Cowboys/ }));
     await expect(await canvas.findByText("Following")).toBeInTheDocument();
     await expect(canvas.getByRole("button", { name: "Saved" })).toBeDisabled();
   },
@@ -49,7 +49,7 @@ export const GameGoneWhenFollowing: Story = {
   parameters: { api: { "PUT /api/game": failWith(404, "That game is not live or coming up any more.") } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(await canvas.findByRole("button", { name: "Follow Kansas City Chiefs at Los Angeles Chargers" }));
+    await userEvent.click(await canvas.findByRole("button", { name: /Kansas City Chiefs/ }));
     await expect(await within(document.body).findByText("Could not follow that game")).toBeInTheDocument();
   },
 };
