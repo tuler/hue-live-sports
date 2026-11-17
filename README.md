@@ -2,7 +2,7 @@
 
 Flash Philips Hue lights on live sports: touchdowns, field goals, goals, runs, kickoff and the final whistle.
 
-By default it tracks every team in the league and flashes for each score in the scoring team's colours. Name the teams you want and it flashes only for their games, the opponent's scores included.
+You pick the game you're watching, live or starting within a day. Every score in it flashes in the scoring team's colours, both teams' included, and following ends with the final.
 
 It learns the score by polling ESPN's public scoreboard, by receiving webhooks, or both. It works out what happened from the change in score and plays an effect in the scoring team's colours through the Hue Bridge's local API.
 
@@ -20,7 +20,7 @@ bun start pair            # press the bridge's link button first, then put the k
 bun start groups          # room and zone names for config.json
 bun start games           # check that the scoreboard is being read
 bun start test touchdown KC       # preview an effect in a team's colours
-bun start run             # add --dry-run to log events without touching the lights
+bun start run KC          # follow KC's live or next game; add --dry-run to log without touching the lights
 ```
 
 Bun runs the TypeScript directly and loads `.env` itself, so there is no build step. `bun run compile` produces a standalone binary at `dist/hue-live-sports` for a machine without Bun.
@@ -38,8 +38,7 @@ The bridge can also be reached through Hue's cloud instead of the LAN, which is 
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `league` | | `nfl`, `ncaaf`, `nba`, `wnba`, `nhl`, `mlb`, `mls`, `epl`, `laliga`, `bundesliga`, `seriea`, `ligue1`, `brasileirao`, `ucl`, or any ESPN path such as `soccer/ned.1` |
-| `teams` | `[]` | Teams to track. Empty tracks every team. Otherwise every event in these teams' games flashes, the opponent's scores included, in the scoring team's colours. NFL: any of the 32 teams by abbreviation, nickname or full name (`NYG`, `Giants`). Other leagues: ESPN abbreviation or full name |
+| `league` | | Where `run <team>` looks for the game: `nfl`, `ncaaf`, `nba`, `wnba`, `nhl`, `mlb`, `mls`, `epl`, `laliga`, `bundesliga`, `seriea`, `ligue1`, `brasileirao`, `ucl`, or any ESPN path such as `soccer/ned.1` |
 | `group` | | Hue room or zone to flash |
 | `poll` | `true` | Poll ESPN's scoreboard |
 | `pollSeconds` | `10` | Poll interval while a game is live (minimum 5) |
@@ -50,9 +49,13 @@ The bridge can also be reached through Hue's cloud instead of the LAN, which is 
 
 Each effect is `{ "enabled", "seconds", "signal", "colors" }`. `signal` is `alternating` (two colours) or `on_off_color` (one). `colors` is an optional list of hex colours that replaces the team's own.
 
-Effect keys are the kind of score, falling back to `score`: `touchdown`, `field_goal`, `two_points`, `extra_point`, `goal`, `run`, `basket`. Game-level keys are `game_start`, `win` (the winner's colours) and `draw`. Defaults are in [`src/config.ts`](src/config.ts). Off by default: extra points, baskets, kickoffs and draws, since a full slate would otherwise flash constantly.
+Effect keys are the kind of score, falling back to `score`: `touchdown`, `field_goal`, `two_points`, `extra_point`, `goal`, `run`, `basket`. Game-level keys are `game_start`, `win` (the winner's colours) and `draw`; a kickoff or a draw has no scoring team, so it alternates both teams' main colours. Defaults are in [`src/config.ts`](src/config.ts). Off by default: extra points, which follow nearly every touchdown, and baskets, which would flash constantly.
 
-Effects play one at a time. With many games live they can queue up, so one that would start more than 45 seconds late is skipped.
+Effects play one at a time. If they queue up, one that would start more than 45 seconds late is skipped.
+
+## Following a game
+
+`run <team>` follows that team's live game, or else its next one starting within a day, on the `league` scoreboard. For the NFL any of the 32 teams works by abbreviation, nickname or full name (`NYG`, `Giants`); other leagues take ESPN's abbreviation or full name. It flashes for that game only and exits once the final has played (or 12 hours after kickoff, if no final is ever seen).
 
 ## Score sources
 
@@ -104,12 +107,13 @@ A provider on the internet cannot reach `127.0.0.1`. Put a tunnel such as `cloud
 
 All 32 teams are built in (`bun start teams` lists them), each with one or two lamp colours in [`src/nfl.ts`](src/nfl.ts). These start from the team's palette but are tuned for bulbs: black is dropped, silver becomes white, and a few dark shades are more saturated. To change one, edit the table or set `colors` on an effect.
 
-Because the colours are built in, `test` works for any NFL team whether or not it is playing. With teams named, `bun start test touchdown` uses the first one. Other leagues take colours from the scoreboard, so `test` only knows them on a game day.
+Because the colours are built in, `test` works for any NFL team whether or not it is playing. Other leagues take colours from the scoreboard, so `test` only knows them on a game day.
 
 ## Limits
 
 - **The feed can run ahead of or behind your TV.** `delaySeconds` fixes a feed that spoils the play. Nothing fixes a feed that is late.
 - **ESPN's scoreboard is undocumented** and can change or lag without notice. `src/espn.ts` is the only file that knows its shape.
+- **Only games on ESPN's current board can be picked.** For most leagues that is one US day, and it rolls over during the US morning, so late at night tonight's games are not listed yet. The NFL board covers the whole week.
 - **Two games between the same teams on one scoreboard**, such as a baseball doubleheader, are read as one game.
 - **Events are inferred from the score.** Two football points could be a conversion or a safety, and a touchdown plus its extra point inside one poll reads as a single 7-point touchdown. Cards, penalties and other non-scoring plays are not detected.
 - **The Remote API adds a round trip through Hue's cloud** and has rate limits that are not yet measured.
@@ -117,17 +121,17 @@ Because the colours are built in, `test` works for any NFL team whether or not i
 
 ## Cloudflare Worker
 
-The hosted version runs at [hue-live-sports.tuler.dev](https://hue-live-sports.tuler.dev). Anyone with a Hue Bridge can open it, press **Connect Hue**, sign in on Philips Hue's own site, and then pick a room, a league, teams (or every team), a TV delay and effects. There are no accounts: the bridge is the account, and a signed cookie keeps you signed in for 30 days.
+The hosted version runs at [hue-live-sports.tuler.dev](https://hue-live-sports.tuler.dev). Anyone with a Hue Bridge can open it, press **Connect Hue**, sign in on Philips Hue's own site, pick a room, and then pick the game they're watching from the live and upcoming games of a league. The lights follow that one game until its final; the next game is picked the same way. A TV delay and effects are kept between games. There are no accounts: the bridge is the account, and a signed cookie keeps you signed in for 30 days.
 
 [`src/worker`](src/worker) runs the same pipeline as the local service, with no bridge on the local network:
 
-- **Games** (a Durable Object per league) holds the shared tracker behind the webhook receiver at `POST /webhook/<league>`. Game state is the same for everyone.
-- **Feeder** (one per league) polls ESPN on an alarm, every 10 s while a game is live, and posts the board to that receiver, signed, like any other score source. It stops when a league has no users.
-- **User** (one per bridge) keeps that bridge's settings and Hue Remote API tokens. It filters events to the chosen teams, holds each effect for the TV delay, and plays it from an alarm.
+- **Games** (a Durable Object per league) holds the shared tracker behind the webhook receiver at `POST /webhook/<league>`, and who follows which game. Game state is the same for everyone; each user gets only their game's events, and is let go at its final.
+- **Feeder** (one per league) polls ESPN on an alarm, every 10 s while a game is live, and posts the board to that receiver, signed, like any other score source. It stops when nobody in the league follows a game.
+- **User** (one per bridge) keeps that bridge's settings, the game it follows and its Hue Remote API tokens. It holds each effect for the TV delay, plays it from an alarm, and stops following when the final arrives (or 12 hours after kickoff).
 
-The page is a React + [Mantine](https://mantine.dev) app in [`web/`](web), built by Vite and served by the Worker as static assets. The main screen is kept simple (room, league and teams, TV delay, test flash); effects and the flash mode sit under **Advanced**.
+The page is a React + [Mantine](https://mantine.dev) app in [`web/`](web), built by Vite and served by the Worker as static assets. The main screen is kept simple (the game, the room, TV delay, test flash); effects and the flash mode sit under **Advanced**.
 
-Run it locally with `bun run worker:dev`, and `bun run web:dev` for hot reload of the page. It needs `.dev.vars` (gitignored) with `WEBHOOK_SECRET`, `HUE_CLIENT_ID`, `HUE_CLIENT_SECRET`, `ADMIN_TOKEN` and `SESSION_SECRET`. Hue sends sign-ins back to the callback URL registered for the Hue app (`https://hue-live-sports.tuler.dev/auth/callback`), so signing in only works on the deployed Worker. Admin routes take `Authorization: Bearer $ADMIN_TOKEN`: `GET|PUT|DELETE /users/<id>`, `POST /users/<id>/test` and `GET /leagues/<league>`.
+Run it locally with `bun run worker:dev`, and `bun run web:dev` for hot reload of the page. It needs `.dev.vars` (gitignored) with `WEBHOOK_SECRET`, `HUE_CLIENT_ID`, `HUE_CLIENT_SECRET`, `ADMIN_TOKEN` and `SESSION_SECRET`. Hue sends sign-ins back to the callback URL registered for the Hue app (`https://hue-live-sports.tuler.dev/auth/callback`), so signing in only works on the deployed Worker. Admin routes take `Authorization: Bearer $ADMIN_TOKEN`: `GET|PUT|DELETE /users/<id>`, `PUT|DELETE /users/<id>/game` (`{ "league", "key" }`, the key being the two team abbreviations, lowercase and sorted, like `dal-nyg`), `POST /users/<id>/test` and `GET /leagues/<league>`.
 
 ## Development
 

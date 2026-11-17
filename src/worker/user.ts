@@ -1,7 +1,8 @@
 /**
- * One user: their settings, their Hue Remote API tokens and app key, and the
- * queue of effects waiting out their TV delay. Events arrive from the league's
- * Games object; an alarm plays each effect when it is due.
+ * One user: their settings, the game they follow, their Hue Remote API tokens
+ * and app key, and the queue of effects waiting out their TV delay. Events for
+ * the followed game arrive from the league's Games object; an alarm plays each
+ * effect when it is due. Following ends with the game's final.
  *
  * A Durable Object handles one request at a time around storage, so only one
  * token refresh can be in flight, which the single-use refresh token needs.
@@ -11,6 +12,7 @@ import { parseSettings, effectFor, type Settings } from "../config.ts";
 import { colorsFor, play } from "../effects.ts";
 import { resolveLeague, type TeamSide } from "../espn.ts";
 import type { SportsEvent } from "../events.ts";
+import { endsGame, hasLapsed, type FollowedGame } from "../follow.ts";
 import { HueBridge, type LightGroup } from "../hue.ts";
 import { HueRemoteAuth, remoteTransport, type RemoteTokens, type TokenStore } from "../hue-remote.ts";
 import { findNflTeam, NFL_LEAGUE } from "../nfl.ts";
@@ -20,6 +22,7 @@ import type { Env } from "./env.ts";
 interface Profile {
   id: string;
   settings: Settings;
+  game?: FollowedGame;
 }
 
 export class User extends DurableObject<Env> {
@@ -45,8 +48,14 @@ export class User extends DurableObject<Env> {
 
   private async profile(): Promise<Profile> {
     const profile = await this.ctx.storage.get<Profile>("profile");
-    if (!profile) throw new Error("User is not configured.");
+    if (!profile) throw new Error("Pick your room first.");
     return profile;
+  }
+
+  /** The game being followed, unless following has lapsed. */
+  private static current(profile: Profile | undefined): FollowedGame | undefined {
+    const game = profile?.game;
+    return game && !hasLapsed(game, Date.now()) ? game : undefined;
   }
 
   private async loadQueue(): Promise<PlannedEffect[]> {
@@ -62,19 +71,38 @@ export class User extends DurableObject<Env> {
     else await this.ctx.storage.setAlarm(next);
   }
 
-  /** Saves settings, subscribes to the league and starts its feeder. */
+  /** Saves settings. Which game to follow is `follow`'s business. */
   async configure(id: string, raw: unknown): Promise<Settings> {
     const settings = parseSettings(raw);
-    const league = resolveLeague(settings.league);
     const old = await this.ctx.storage.get<Profile>("profile");
-    if (old && resolveLeague(old.settings.league) !== league) {
-      await this.env.GAMES.getByName(resolveLeague(old.settings.league)).unsubscribe(id);
-    }
-    await this.ctx.storage.put<Profile>("profile", { id, settings });
+    await this.ctx.storage.put<Profile>("profile", { ...old, id, settings });
     this.group = undefined;
-    await this.env.GAMES.getByName(league).subscribe(id);
-    await this.env.FEEDER.getByName(league).start(league);
     return settings;
+  }
+
+  /**
+   * Follows `game` instead of whatever came before: subscribes to it in its
+   * league and starts that league's feeder. Effects still queued for the old
+   * game are dropped.
+   */
+  async follow(game: FollowedGame): Promise<FollowedGame> {
+    const profile = await this.profile();
+    if (profile.game) await this.env.GAMES.getByName(resolveLeague(profile.game.league)).unsubscribe(profile.id);
+    await this.saveQueue([]);
+    const league = resolveLeague(game.league);
+    await this.ctx.storage.put<Profile>("profile", { ...profile, game });
+    await this.env.GAMES.getByName(league).subscribe(profile.id, game.key, game.until);
+    await this.env.FEEDER.getByName(league).start(league);
+    return game;
+  }
+
+  /** Stops following, and drops any effects still queued. */
+  async unfollow(): Promise<void> {
+    const profile = await this.ctx.storage.get<Profile>("profile");
+    if (!profile?.game) return;
+    await this.env.GAMES.getByName(resolveLeague(profile.game.league)).unsubscribe(profile.id);
+    await this.ctx.storage.put<Profile>("profile", { ...profile, game: undefined });
+    await this.saveQueue([]);
   }
 
   /**
@@ -96,30 +124,40 @@ export class User extends DurableObject<Env> {
     await this.ctx.storage.put("appKey", appKey);
   }
 
-  /** What the settings page needs: saved settings, if any. */
-  async me(): Promise<{ settings?: Settings; connected: boolean }> {
+  /** What the settings page needs: saved settings and the followed game, if any. */
+  async me(): Promise<{ settings?: Settings; game?: FollowedGame; connected: boolean }> {
     const profile = await this.ctx.storage.get<Profile>("profile");
-    return { settings: profile?.settings, connected: Boolean(await this.ctx.storage.get<string>("appKey")) };
+    return {
+      settings: profile?.settings,
+      game: User.current(profile),
+      connected: Boolean(await this.ctx.storage.get<string>("appKey")),
+    };
   }
 
   async groups(): Promise<{ name: string; kind: string }[]> {
     return (await (await this.bridge()).groups()).map((g) => ({ name: g.name, kind: g.kind }));
   }
 
-  /** Disconnects: leaves the league and forgets everything, tokens included. */
+  /** Disconnects: stops following and forgets everything, tokens included. */
   async remove(): Promise<void> {
     const profile = await this.ctx.storage.get<Profile>("profile");
-    if (profile) await this.env.GAMES.getByName(resolveLeague(profile.settings.league)).unsubscribe(profile.id);
+    if (profile?.game) await this.env.GAMES.getByName(resolveLeague(profile.game.league)).unsubscribe(profile.id);
     await this.ctx.storage.deleteAlarm();
     await this.ctx.storage.deleteAll();
     this.queue = undefined;
     this.group = undefined;
   }
 
-  /** Queues the effects this user wants for `events`. Called by the league's Games object. */
+  /**
+   * Queues the effects this user wants for `events`, and stops following once
+   * the game's final is among them. Called by the league's Games object.
+   */
   async deliver(events: SportsEvent[]): Promise<number> {
-    const { settings } = await this.profile();
-    const planned = planEffects(events, settings, Date.now());
+    const profile = await this.profile();
+    const game = User.current(profile);
+    if (!game) return 0;
+    const planned = planEffects(events, profile.settings, game, Date.now());
+    if (endsGame(events, game.key)) await this.ctx.storage.put<Profile>("profile", { ...profile, game: undefined });
     if (planned.length === 0) return 0;
     const queue = [...(await this.loadQueue()), ...planned].sort((a, b) => a.dueAt - b.dueAt);
     await this.saveQueue(queue);
@@ -153,16 +191,22 @@ export class User extends DurableObject<Env> {
     return this.group;
   }
 
-  /** Plays one effect now in a team's colours, to check the whole route. */
-  async test(effectKey: string, team: Pick<TeamSide, "abbreviation" | "color" | "alternateColor">): Promise<string> {
-    const { settings } = await this.profile();
+  /**
+   * Plays one effect now, to check the whole route: in `team`'s colours if
+   * given, else in the followed game's colours, else white.
+   */
+  async test(effectKey: string, team?: Pick<TeamSide, "abbreviation" | "color" | "alternateColor">): Promise<string> {
+    const profile = await this.profile();
+    const { settings } = profile;
     const effect = effectFor(settings, [effectKey]);
     if (!effect) throw new Error(`Effect "${effectKey}" is unknown or disabled.`);
-    const league = resolveLeague(settings.league);
-    const abbreviation = league === NFL_LEAGUE ? (findNflTeam(team.abbreviation)?.abbr ?? team.abbreviation) : team.abbreviation;
-    const side = { ...team, abbreviation } as TeamSide;
+    const game = User.current(profile);
+    const league = game ? resolveLeague(game.league) : NFL_LEAGUE;
+    const nfl = (t: Pick<TeamSide, "abbreviation" | "color" | "alternateColor">) =>
+      league === NFL_LEAGUE ? { ...t, abbreviation: findNflTeam(t.abbreviation)?.abbr ?? t.abbreviation } : t;
+    const teams = team?.abbreviation ? [nfl(team)] : game ? [game.home, game.away] : [];
     const group = await this.lightGroup(settings);
-    await play({ bridge: await this.bridge(), group }, settings.effectMode, effect, colorsFor(side, effect, league));
+    await play({ bridge: await this.bridge(), group }, settings.effectMode, effect, colorsFor(effect, league, teams));
     return `Played "${effectKey}" on ${group.name} for ${effect.seconds}s`;
   }
 
@@ -171,6 +215,7 @@ export class User extends DurableObject<Env> {
     const tokens = await this.ctx.storage.get<RemoteTokens>("tokens");
     return {
       profile,
+      following: User.current(profile)?.name,
       signedIn: Boolean(tokens),
       accessTokenExpiresAt: tokens ? new Date(tokens.expiresAt).toISOString() : undefined,
       hasAppKey: Boolean(await this.ctx.storage.get<string>("appKey")),

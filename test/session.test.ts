@@ -1,5 +1,4 @@
 import { describe, expect, it } from "bun:test";
-import { fetchTeams } from "../src/espn.ts";
 import { checkState, oauthState, readCookie, sessionCookie, sessionUser, SESSION_COOKIE, STATE_COOKIE } from "../src/worker/session.ts";
 
 const SECRET = "session-secret";
@@ -30,22 +29,5 @@ describe("session cookies", () => {
     expect(await checkState(withCookie(cookie), state, SECRET)).toBe(true);
     expect(await checkState(withCookie(cookie), crypto.randomUUID(), SECRET)).toBe(false);
     expect(await checkState(new Request("https://x/"), state, SECRET)).toBe(false);
-  });
-});
-
-describe("fetchTeams", () => {
-  it("reads ESPN's teams list, skipping malformed entries", async () => {
-    const fake = (async () =>
-      Response.json({
-        sports: [{ leagues: [{ teams: [
-          { team: { abbreviation: "LIV", displayName: "Liverpool", color: "d11317", alternateColor: "f6eb61" } },
-          { team: { abbreviation: "ARS", displayName: "Arsenal", color: "e20520" } },
-          { team: { displayName: "No abbreviation" } },
-        ] }] }],
-      })) as unknown as typeof fetch;
-    expect(await fetchTeams("soccer/eng.1", fake)).toEqual([
-      { abbreviation: "ARS", name: "Arsenal", color: "e20520", alternateColor: undefined },
-      { abbreviation: "LIV", name: "Liverpool", color: "d11317", alternateColor: "f6eb61" },
-    ]);
   });
 });

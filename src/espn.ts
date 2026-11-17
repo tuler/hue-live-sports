@@ -30,6 +30,8 @@ export interface GameSnapshot {
   teams: TeamSide[];
   /** When the source observed this state (ms since epoch), if it says. */
   asOf?: number;
+  /** Scheduled start (ms since epoch), if the source says. */
+  startsAt?: number;
 }
 
 /** Short aliases for ESPN's "sport/league" path segments. */
@@ -144,6 +146,7 @@ export function parseScoreboard(json: unknown, leaguePath: string): GameSnapshot
     if (teams.length !== 2) continue;
     const type = obj(obj(competition.status ?? event.status)?.type);
     const state = type?.state === "in" || type?.state === "post" ? type.state : "pre";
+    const startsAt = Date.parse(str(event.date) ?? str(competition.date) ?? "");
     games.push({
       id,
       name: str(event.shortName) ?? str(event.name) ?? teams.map((t) => t.abbreviation).join(" v "),
@@ -151,6 +154,7 @@ export function parseScoreboard(json: unknown, leaguePath: string): GameSnapshot
       state,
       detail: str(type?.shortDetail) ?? str(type?.detail) ?? state,
       teams,
+      ...(Number.isNaN(startsAt) ? {} : { startsAt }),
     });
   }
   return games;
@@ -177,39 +181,4 @@ export async function fetchScoreboard(
 export function isTeam(side: TeamSide, team: string): boolean {
   const q = team.trim().toLowerCase();
   return side.abbreviation.toLowerCase() === q || side.name.toLowerCase() === q;
-}
-
-export const isAnyTeam = (side: TeamSide, teams: readonly string[]): boolean =>
-  teams.some((team) => isTeam(side, team));
-
-/** The games to watch: every game, or only those involving one of `teams`. */
-export function followedGames(games: GameSnapshot[], teams: readonly string[]): GameSnapshot[] {
-  if (teams.length === 0) return games;
-  return games.filter((g) => g.teams.some((t) => isAnyTeam(t, teams)));
-}
-
-export interface LeagueTeam {
-  abbreviation: string;
-  name: string;
-  /** Hex without "#", as ESPN reports it. */
-  color?: string;
-  alternateColor?: string;
-}
-
-/** Every team in a league, from ESPN's teams list. Malformed entries are skipped. */
-export async function fetchTeams(leaguePath: string, fetchImpl: typeof fetch = fetch): Promise<LeagueTeam[]> {
-  const res = await fetchImpl(`https://site.api.espn.com/apis/site/v2/sports/${leaguePath}/teams?limit=500`, {
-    headers: { accept: "application/json", "user-agent": USER_AGENT },
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (!res.ok) throw new Error(`ESPN teams list returned HTTP ${res.status}`);
-  const data = (await res.json()) as { sports?: { leagues?: { teams?: { team?: Record<string, unknown> }[] }[] }[] };
-  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
-  const teams = (data.sports?.[0]?.leagues?.[0]?.teams ?? []).flatMap(({ team }) => {
-    const abbreviation = str(team?.abbreviation);
-    const name = str(team?.displayName);
-    if (!abbreviation || !name) return [];
-    return [{ abbreviation: canonicalAbbreviation(leaguePath, abbreviation), name, color: str(team?.color), alternateColor: str(team?.alternateColor) }];
-  });
-  return teams.sort((a, b) => a.name.localeCompare(b.name));
 }

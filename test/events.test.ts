@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { parseScoreboard } from "../src/espn.ts";
-import { classifyScore, detectEvents, eventKeys, forTeams } from "../src/events.ts";
+import { classifyScore, detectEvents, eventKeys } from "../src/events.ts";
 import { scoreboard } from "./fixture.ts";
 
 const snap = (state: "pre" | "in" | "post", home: number, away: number, league = "football/nfl") =>
@@ -64,32 +64,5 @@ describe("detectEvents", () => {
   it("reports a last-second score together with the final", () => {
     const events = detectEvents(snap("in", 21, 21), snap("post", 24, 21));
     expect(events.map((e) => e.type)).toEqual(["score", "game_end"]);
-  });
-});
-
-describe("forTeams", () => {
-  const td = detectEvents(snap("in", 0, 0), snap("in", 6, 0))[0]!; // NYG scores
-  const kickoff = detectEvents(snap("pre", 0, 0), snap("in", 0, 0))[0]!;
-  const win = detectEvents(snap("in", 14, 21), snap("post", 14, 21))[0]!; // DAL wins
-  const draw = detectEvents(snap("in", 20, 20), snap("post", 20, 20))[0]!;
-  const team = (e: typeof td, teams: string[]) => forTeams(e, teams)?.team.abbreviation;
-
-  it("gives every event to someone tracking every team", () => {
-    expect(forTeams(td, [])).toEqual({ team: td.game.teams[0]!, keys: ["touchdown", "score"] });
-    expect([kickoff, win, draw].map((e) => team(e, []))).toEqual(["NYG", "DAL", "NYG"]);
-  });
-
-  it("gives either team's score or win to both sides, in the scorer's or winner's colours", () => {
-    expect(team(td, ["NYG"])).toBe("NYG");
-    expect(team(td, ["DAL"])).toBe("NYG");
-    expect(team(win, ["DAL"])).toBe("DAL");
-    expect(team(win, ["NYG"])).toBe("DAL");
-    expect(forTeams(td, ["KC"])).toBeUndefined();
-  });
-
-  it("gives a kickoff or a draw to either team, in the tracked team's colours", () => {
-    expect(team(kickoff, ["DAL"])).toBe("DAL");
-    expect(team(draw, ["DAL", "KC"])).toBe("DAL");
-    expect(forTeams(kickoff, ["KC"])).toBeUndefined();
   });
 });

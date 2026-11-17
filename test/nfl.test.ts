@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { hexToXy } from "../src/color.ts";
-import { parseConfig } from "../src/config.ts";
-import { followedGames, parseScoreboard } from "../src/espn.ts";
+import { parseScoreboard } from "../src/espn.ts";
+import { gameKey } from "../src/tracker.ts";
 import { findNflTeam, NFL_TEAMS, requireNflTeam } from "../src/nfl.ts";
 import { teamColors } from "../src/effects.ts";
 import { scoreboard } from "./fixture.ts";
@@ -56,24 +56,10 @@ describe("NFL teams", () => {
   });
 });
 
-describe("NFL config and scoreboard", () => {
-  const base = { league: "nfl", group: "Den" };
-
-  it("normalises configured teams to abbreviations", () => {
-    expect(parseConfig({ ...base, teams: ["giants", "WAS", "San Francisco 49ers"] }).teams).toEqual(["NYG", "WSH", "SF"]);
-    expect(parseConfig({ ...base, teams: ["Bucs", "TB", "tampa"] }).teams).toEqual(["TB"]);
-    expect(parseConfig({ ...base, league: "football/nfl", team: "jets" }).teams).toEqual(["NYJ"]);
-    expect(parseConfig(base).teams).toEqual([]);
-  });
-
-  it("rejects unknown NFL teams but leaves other leagues alone", () => {
-    expect(() => parseConfig({ ...base, teams: ["NYG", "Arsenal"] })).toThrow(/not an NFL team/);
-    expect(parseConfig({ ...base, league: "epl", teams: ["ARS"] }).teams).toEqual(["ARS"]);
-  });
-
+describe("NFL scoreboard", () => {
   it("matches a game when the feed uses another abbreviation", () => {
     const games = parseScoreboard(scoreboard("in", 7, 3, "WAS"), "football/nfl");
     expect(games[0]?.teams[1]?.abbreviation).toBe("WSH");
-    expect(followedGames(games, parseConfig({ ...base, team: "Commanders" }).teams)[0]?.id).toBe("401");
+    expect(gameKey(games[0]!)).toBe("nyg-wsh");
   });
 });

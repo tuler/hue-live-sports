@@ -8,7 +8,7 @@ import { isLate, planEffects } from "../src/plan.ts";
 import { ESPN_SOURCE, scoreboardPayload } from "../src/sources/feed.ts";
 import { createWebhookHandler, genericAdapter, signGeneric } from "../src/sources/webhook.ts";
 import { Tracker } from "../src/tracker.ts";
-import { board, type FakeGame } from "./fixture.ts";
+import { board, following, type FakeGame } from "./fixture.ts";
 
 const SECRET = "s3cret";
 const live = (id: string, home: [string, number], away: [string, number], state: FakeGame["state"] = "in"): FakeGame => ({
@@ -90,9 +90,9 @@ describe("planEffects", () => {
   events.update(espn([live("1", ["NYG", 0], ["DAL", 0]), live("2", ["KC", 0], ["BUF", 0])]), "espn");
   const batch = events.update(espn([live("1", ["NYG", 6], ["DAL", 3]), live("2", ["KC", 1], ["BUF", 0])]), "espn");
 
-  it("plans the tracked teams' games, opponents included, after the TV delay", () => {
-    const settings = parseSettings({ league: "nfl", group: "Den", teams: ["Cowboys"], delaySeconds: 30 });
-    const planned = planEffects(batch, settings, 1_000);
+  it("plans the followed game's scores, both teams', after the TV delay", () => {
+    const settings = parseSettings({ group: "Den", delaySeconds: 30 });
+    const planned = planEffects(batch, settings, following("NYG", "DAL"), 1_000);
     expect(planned.map((p) => [p.label.split(" (")[0], p.dueAt, p.effect.seconds])).toEqual([
       ["NYG touchdown", 31_000, 10],
       ["DAL field goal", 31_000, 5],
@@ -101,10 +101,18 @@ describe("planEffects", () => {
   });
 
   it("leaves out disabled effects and other games", () => {
-    const all = parseSettings({ league: "nfl", group: "Den" });
+    const settings = parseSettings({ group: "Den" });
     // KC's extra point is off by default.
-    expect(planEffects(batch, all, 0).map((p) => p.label.split(" ")[0])).toEqual(["NYG", "DAL"]);
-    expect(planEffects(batch, parseSettings({ league: "nfl", group: "Den", teams: ["PHI"] }), 0)).toEqual([]);
+    expect(planEffects(batch, settings, following("KC", "BUF"), 0)).toEqual([]);
+    expect(planEffects(batch, settings, following("PHI", "NYG"), 0)).toEqual([]);
+  });
+
+  it("shows both teams' main colours for a kickoff", () => {
+    const t = new Tracker();
+    t.update(espn([live("1", ["NYG", 0], ["DAL", 0], "pre")]), "espn");
+    const kickoff = t.update(espn([live("1", ["NYG", 0], ["DAL", 0])]), "espn");
+    const [planned] = planEffects(kickoff, parseSettings({ group: "Den" }), following("NYG", "DAL"), 0);
+    expect(planned?.colors).toEqual([hexToXy("0B2265"), hexToXy("003594")]);
   });
 
   it("calls an effect late after 45 seconds", () => {

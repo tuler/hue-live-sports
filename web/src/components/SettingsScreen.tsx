@@ -1,26 +1,39 @@
-import { Accordion, Alert, Box, Button, Container, Group, MultiSelect, NumberInput, Select, Stack, Switch, Text } from "@mantine/core";
+import { Accordion, Alert, Box, Button, Container, Group, NumberInput, Select, Stack, Text } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useEffect, useState } from "react";
-import { api, type Group as LightGroup, type Me, type Settings, type Team } from "../api.ts";
+import { api, type FollowedGame, type Game, type Group as LightGroup, type Me, type Settings } from "../api.ts";
 import { testEffect } from "../effects.ts";
 import { errorMessage, type Load } from "../load.ts";
 import { Advanced } from "./Advanced.tsx";
+import { GamePicker } from "./GamePicker.tsx";
 import { Section } from "./Section.tsx";
-import { Swatches } from "./Swatches.tsx";
 
-/** The signed-in screen: room, teams and delay up front, everything else under Advanced. */
+const LEAGUE_KEY = "hls.league";
+
+/** The league last browsed, remembered on this device only. */
+function rememberedLeague(me: Me): string {
+  try {
+    const stored = localStorage.getItem(LEAGUE_KEY);
+    if (stored && me.leagues.some((l) => l.id === stored)) return stored;
+  } catch {
+    // Storage can be blocked; the default does.
+  }
+  return me.leagues[0]?.id ?? "nfl";
+}
+
 const initialSettings = (me: Me): Settings => structuredClone(me.settings ?? { ...me.defaults, group: "" });
 
+/** The signed-in screen: the game and the room up front, effects under Advanced. */
 export function SettingsScreen({ me }: { me: Me }) {
   const [settings, setSettings] = useState<Settings>(() => initialSettings(me));
   const [saved, setSaved] = useState<string>(() => (me.settings ? JSON.stringify(me.settings) : ""));
-  /** Kept apart from `settings.teams` so choosing "every team" and back keeps the picks. */
-  const [everyTeam, setEveryTeam] = useState(() => (me.settings?.teams.length ?? 0) === 0);
+  const [game, setGame] = useState<FollowedGame | undefined>(me.game);
+  const [league, setLeague] = useState(() => me.game?.league ?? rememberedLeague(me));
   const [groups, setGroups] = useState<Load<LightGroup[]>>({ state: "loading" });
-  const [teams, setTeams] = useState<Load<Team[]>>({ state: "loading" });
-  const [busy, setBusy] = useState<"save" | "test" | null>(null);
+  /** "save", "test", "stop", or the key of the game being followed. */
+  const [busy, setBusy] = useState<string | null>(null);
 
-  const sport = me.leagues.find((l) => l.id === settings.league)?.sport ?? "other";
+  const sport = me.leagues.find((l) => l.id === (game?.league ?? league))?.sport ?? "other";
 
   useEffect(() => {
     api
@@ -32,38 +45,28 @@ export function SettingsScreen({ me }: { me: Me }) {
       .catch((err) => setGroups({ state: "error", message: errorMessage(err) }));
   }, []);
 
-  useEffect(() => {
-    setTeams({ state: "loading" });
-    let current = true;
-    api
-      .teams(settings.league)
-      .then((value) => current && setTeams({ state: "ready", value }))
-      .catch((err) => current && setTeams({ state: "error", message: errorMessage(err) }));
-    return () => {
-      current = false;
-    };
-  }, [settings.league]);
+  const pickLeague = (id: string) => {
+    setLeague(id);
+    try {
+      localStorage.setItem(LEAGUE_KEY, id);
+    } catch {
+      // Only a convenience.
+    }
+  };
 
-  const body = (): Settings => ({ ...settings, teams: everyTeam ? [] : settings.teams });
-  const dirty = JSON.stringify(body()) !== saved;
-  const teamList = teams.state === "ready" ? teams.value : [];
-  const byAbbr = new Map(teamList.map((t) => [t.abbreviation, t]));
+  const dirty = JSON.stringify(settings) !== saved;
 
   const save = async (quiet = false): Promise<boolean> => {
-    if (!everyTeam && settings.teams.length === 0) {
-      notifications.show({ color: "red", message: "Pick at least one team, or follow every team." });
-      return false;
-    }
     if (!settings.group) {
       notifications.show({ color: "red", message: "Pick the room or zone to flash." });
       return false;
     }
     setBusy("save");
     try {
-      const { settings: stored } = await api.save(body());
+      const { settings: stored } = await api.save(settings);
       setSettings((s) => ({ ...s, effects: stored.effects }));
       setSaved(JSON.stringify(stored));
-      if (!quiet) notifications.show({ color: "green", message: "Saved. Your lights are watching." });
+      if (!quiet) notifications.show({ color: "green", message: "Saved." });
       return true;
     } catch (err) {
       notifications.show({ color: "red", title: "Could not save", message: errorMessage(err) });
@@ -73,18 +76,48 @@ export function SettingsScreen({ me }: { me: Me }) {
     }
   };
 
+  const follow = async (picked: Game) => {
+    if (dirty && !(await save(true))) return;
+    setBusy(picked.key);
+    try {
+      const { game: followed } = await api.follow(picked);
+      setGame(followed);
+      notifications.show({
+        color: "green",
+        message: `Following ${followed.away.name} at ${followed.home.name}. ${settings.group} flashes for every score.`,
+      });
+    } catch (err) {
+      notifications.show({ color: "red", title: "Could not follow that game", message: errorMessage(err) });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const stop = async () => {
+    setBusy("stop");
+    try {
+      await api.unfollow();
+      setGame(undefined);
+      notifications.show({ message: "Stopped following. Your lights stay as they are." });
+    } catch (err) {
+      notifications.show({ color: "red", title: "Could not stop", message: errorMessage(err) });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const test = async () => {
     const effect = testEffect(sport, settings.effects);
-    const team = everyTeam ? teamList[0] : byAbbr.get(settings.teams[0] ?? "");
-    if (!effect || !team) {
-      notifications.show({ color: "red", message: "Turn on at least one effect and pick a team first." });
+    if (!effect) {
+      notifications.show({ color: "red", message: "Turn on at least one effect first." });
       return;
     }
     if (dirty && !(await save(true))) return;
     setBusy("test");
     try {
-      await api.test(effect, team);
-      notifications.show({ color: "green", message: `Flashed ${settings.group} in ${team.name} colours.` });
+      await api.test(effect);
+      const colours = game ? ` in ${game.away.name} and ${game.home.name} colours` : "";
+      notifications.show({ color: "green", message: `Flashed ${settings.group}${colours}.` });
     } catch (err) {
       notifications.show({ color: "red", title: "Could not flash", message: errorMessage(err) });
     } finally {
@@ -96,9 +129,28 @@ export function SettingsScreen({ me }: { me: Me }) {
     <Stack gap="md" pb={96}>
       {!me.settings && (
         <Alert color="orange" variant="light" title="Almost there">
-          Pick your room and teams, then save.
+          Check the room to flash, then pick the game you're watching.
         </Alert>
       )}
+
+      <Section
+        title="Your game"
+        description={
+          game
+            ? "Every score flashes, in the scoring team's colours, until the final whistle."
+            : "Pick the game you're watching. Your lights follow it until the final whistle."
+        }
+      >
+        <GamePicker
+          leagues={me.leagues}
+          league={league}
+          onLeague={pickLeague}
+          followed={game}
+          busy={busy}
+          onFollow={follow}
+          onStop={stop}
+        />
+      </Section>
 
       <Section title="Your lights" description="The room or zone that flashes.">
         {groups.state === "error" ? (
@@ -118,49 +170,6 @@ export function SettingsScreen({ me }: { me: Me }) {
             aria-label="Room or zone"
           />
         )}
-      </Section>
-
-      <Section title="Your teams" description="Every play in their games flashes, in the scoring team's colours.">
-        <Stack gap="md">
-          <Select
-            size="md"
-            label="League"
-            data={me.leagues.map((l) => ({ value: l.id, label: l.name }))}
-            value={settings.league}
-            onChange={(v) => v && v !== settings.league && setSettings({ ...settings, league: v, teams: [] })}
-            allowDeselect={false}
-            searchable
-          />
-          <Switch
-            size="md"
-            label="Follow every team in the league"
-            checked={everyTeam}
-            onChange={(e) => setEveryTeam(e.currentTarget.checked)}
-          />
-          {!everyTeam &&
-            (teams.state === "error" ? (
-              <Alert color="red">Could not load the teams: {teams.message}</Alert>
-            ) : (
-              <MultiSelect
-                size="md"
-                label="Teams"
-                placeholder={teams.state === "loading" ? "Loading teams…" : settings.teams.length ? "" : "Search and pick your teams"}
-                data={teamList.map((t) => ({ value: t.abbreviation, label: t.name }))}
-                value={settings.teams}
-                onChange={(teams) => setSettings({ ...settings, teams })}
-                searchable
-                selectFirstOptionOnChange
-                hidePickedOptions
-                nothingFoundMessage="No team by that name"
-                renderOption={({ option }) => (
-                  <Group gap="sm" wrap="nowrap">
-                    <Swatches colors={byAbbr.get(option.value)?.colors ?? []} />
-                    <Text size="sm">{option.label}</Text>
-                  </Group>
-                )}
-              />
-            ))}
-        </Stack>
       </Section>
 
       <Section title="TV delay" description="Streams run behind the live feed. Hold flashes back so they don't spoil the play.">
@@ -203,10 +212,10 @@ export function SettingsScreen({ me }: { me: Me }) {
       >
         <Container size={640} px="md">
           <Group justify="space-between">
-            <Button variant="default" size="md" onClick={test} loading={busy === "test"} disabled={busy === "save"}>
+            <Button variant="default" size="md" onClick={test} loading={busy === "test"} disabled={busy !== null && busy !== "test"}>
               Test flash
             </Button>
-            <Button size="md" onClick={() => save()} loading={busy === "save"} disabled={!dirty || busy === "test"}>
+            <Button size="md" onClick={() => save()} loading={busy === "save"} disabled={!dirty || (busy !== null && busy !== "save")}>
               {dirty ? "Save" : "Saved"}
             </Button>
           </Group>

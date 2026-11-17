@@ -41,7 +41,7 @@ interface Tracked {
 /**
  * Holds the last known state of every game and turns updates from any number
  * of sources into events. It follows every game it is told about, so one
- * tracker can serve everyone; who cares about an event is `forTeams`'s call.
+ * tracker can serve everyone; who cares about an event is `forGame`'s call.
  *
  * Sources disagree for a while after every play, because some are faster
  * than others. The tracker merges them so each event fires once:
@@ -82,6 +82,16 @@ export class Tracker {
 
   games(): GameSnapshot[] {
     return [...this.tracked.values()].map((t) => t.game);
+  }
+
+  /**
+   * Forgets the game `key` if no source has reported on it for `maxAgeMs`, so
+   * its next update sets a fresh baseline instead of replaying every score
+   * since then. For when someone starts listening after the feed was idle.
+   */
+  forgetStale(key: string, maxAgeMs: number): void {
+    const known = this.tracked.get(key);
+    if (known && this.now() - known.seenAt > maxAgeMs) this.tracked.delete(key);
   }
 
   /**

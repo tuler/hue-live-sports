@@ -2,7 +2,8 @@ import { setTimeout as sleep } from "node:timers/promises";
 import type { Config } from "./config.ts";
 import { play, type Lights } from "./effects.ts";
 import { resolveLeague, type GameSnapshot } from "./espn.ts";
-import { describe, forTeams, type SportsEvent } from "./events.ts";
+import { describe, type SportsEvent } from "./events.ts";
+import { endsGame, forGame, type FollowedGame } from "./follow.ts";
 import { isLate, planEffects } from "./plan.ts";
 import { runPoller } from "./sources/poll.ts";
 import { ADAPTERS, createWebhookHandler, type WebhookOptions } from "./sources/webhook.ts";
@@ -17,16 +18,28 @@ export interface Dispatcher {
   idle(): Promise<void>;
 }
 
-/** Turns events into light effects, one at a time. Without `lights` it only logs. */
-export function createDispatcher(config: Config, lights: Lights | undefined): Dispatcher {
+/**
+ * Turns the followed game's events into light effects, one at a time. Without
+ * `lights` it only logs. `onFinal` is called once its final has been queued.
+ */
+export function createDispatcher(
+  config: Config,
+  game: FollowedGame,
+  lights: Lights | undefined,
+  onFinal: () => void = () => {},
+): Dispatcher {
   // Effects run one at a time so a touchdown and its extra point don't collide.
   let queue: Promise<void> = Promise.resolve();
   return {
     handle(events) {
       const now = Date.now();
-      for (const event of events) if (forTeams(event, config.teams)) log(describe(event));
-      if (!lights) return;
-      for (const planned of planEffects(events, config, now)) {
+      for (const event of events) if (forGame(event, game.key)) log(describe(event));
+      const final = endsGame(events, game.key);
+      if (!lights) {
+        if (final) onFinal();
+        return;
+      }
+      for (const planned of planEffects(events, config, game, now)) {
         queue = queue
           .then(async () => {
             await sleep(Math.max(0, planned.dueAt - Date.now()));
@@ -38,6 +51,7 @@ export function createDispatcher(config: Config, lights: Lights | undefined): Di
           })
           .catch((err: unknown) => console.error("Effect failed:", err));
       }
+      if (final) onFinal();
     },
     idle: () => queue,
   };
@@ -68,20 +82,33 @@ export interface RunOptions {
 }
 
 /**
- * Runs every enabled source until aborted. The poller and the webhook
- * receiver feed one tracker, so an event reported by both fires once.
+ * Follows one game with every enabled source until its final has played, it
+ * lapses, or `signal` aborts. The poller and the webhook receiver feed one
+ * tracker, so an event reported by both fires once.
  */
 export async function run(
   config: Config,
+  game: FollowedGame,
   lights: Lights | undefined,
   signal: AbortSignal,
   options: RunOptions = {},
 ): Promise<void> {
-  const league = resolveLeague(config.league);
+  const league = resolveLeague(game.league);
   const tracker = new Tracker();
-  const dispatcher = createDispatcher(config, lights);
-  const who = config.teams.length ? config.teams.join(", ") : "every team";
-  log(`Watching ${who} in ${league}${lights ? ` on "${lights.group.name}"` : " (dry run)"}`);
+  const done = new AbortController();
+  const stop = () => done.abort();
+  signal.addEventListener("abort", stop, { once: true });
+  if (signal.aborted) stop();
+  const lapse = setTimeout(() => {
+    log(`No final seen for ${game.name}: stopping.`);
+    stop();
+    // setTimeout takes at most a 32-bit delay.
+  }, Math.min(2 ** 31 - 1, Math.max(0, game.until - Date.now())));
+  const dispatcher = createDispatcher(config, game, lights, () => {
+    log(`${game.name} is over.`);
+    stop();
+  });
+  log(`Following ${game.name} in ${league}${lights ? ` on "${lights.group.name}"` : " (dry run)"}`);
 
   const webhook = config.webhook;
   let server: ReturnType<typeof serveWebhook> | undefined;
@@ -105,15 +132,17 @@ export async function run(
       await runPoller(tracker, {
         league,
         liveSeconds: config.pollSeconds,
-        signal,
+        signal: done.signal,
         onEvents: dispatcher.handle,
         log,
         fetchBoard: options.fetchBoard,
       });
-    } else if (!signal.aborted) {
-      await new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once: true }));
+    } else if (!done.signal.aborted) {
+      await new Promise<void>((resolve) => done.signal.addEventListener("abort", () => resolve(), { once: true }));
     }
   } finally {
+    clearTimeout(lapse);
+    signal.removeEventListener("abort", stop);
     await server?.stop();
   }
   await dispatcher.idle();

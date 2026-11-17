@@ -1,4 +1,4 @@
-import { isAnyTeam, type GameSnapshot, type Sport, type TeamSide } from "./espn.ts";
+import { type GameSnapshot, type Sport, type TeamSide } from "./espn.ts";
 
 export type ScoreKind =
   | "touchdown"
@@ -12,7 +12,7 @@ export type ScoreKind =
 
 /**
  * Something that happened in a game, said the same way for everyone. Who
- * cares about it is decided later, per viewer, by `forTeams`.
+ * cares about it is decided later, per viewer, by `forGame`.
  */
 export type SportsEvent =
   | { type: "game_start"; game: GameSnapshot }
@@ -104,20 +104,6 @@ export const EFFECT_KEYS: readonly string[] = [
   "win",
   "draw",
 ] satisfies readonly (ScoreKind | "game_start" | "win" | "draw")[];
-
-/**
- * An event as seen by someone tracking `teams` (empty: every team), or
- * undefined if it is not theirs. Every event in a tracked team's game is
- * theirs, the opponent's scores and wins included. `team` is whose colours to
- * show: the scorer's or the winner's, else (kickoff, draw) the tracked team's.
- */
-export function forTeams(event: SportsEvent, teams: readonly string[]): { team: TeamSide; keys: string[] } | undefined {
-  const tracked = (t: TeamSide) => teams.length === 0 || isAnyTeam(t, teams);
-  const mine = event.game.teams.find(tracked);
-  if (!mine) return undefined;
-  const team = event.type === "score" ? event.team : event.type === "game_end" ? (event.winner ?? mine) : mine;
-  return { team, keys: eventKeys(event) };
-}
 
 export function describe(event: SportsEvent): string {
   const score = event.game.teams.map((t) => `${t.abbreviation} ${t.score}`).join(" - ");

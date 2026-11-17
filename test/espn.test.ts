@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { fetchScoreboard, followedGames, parseScoreboard, resolveLeague, sportOf } from "../src/espn.ts";
+import { fetchScoreboard, parseScoreboard, resolveLeague, sportOf } from "../src/espn.ts";
 import { board, scoreboard } from "./fixture.ts";
 
 describe("espn", () => {
@@ -32,19 +32,10 @@ describe("espn", () => {
     expect(parseScoreboard({ events: "nope" }, "football/nfl")).toEqual([]);
   });
 
-  it("follows every game unless teams are named", () => {
-    const games = parseScoreboard(
-      board([
-        { id: "1", state: "in", home: ["NYG", 0], away: ["DAL", 0] },
-        { id: "2", state: "in", home: ["KC", 0], away: ["BUF", 0] },
-        { id: "3", state: "pre", home: ["SF", 0], away: ["SEA", 0] },
-      ]),
-      "football/nfl",
-    );
-    const ids = (teams: string[]) => followedGames(games, teams).map((g) => g.id);
-    expect(ids([])).toEqual(["1", "2", "3"]);
-    expect(ids(["buf"])).toEqual(["2"]);
-    expect(ids(["Team NYG", "SEA"])).toEqual(["1", "3"]);
-    expect(ids(["PHI"])).toEqual([]);
+  it("reads the scheduled start", () => {
+    const at = Date.UTC(2026, 10, 22, 18, 0);
+    const [game] = parseScoreboard(board([{ id: "1", state: "pre", home: ["NYG", 0], away: ["DAL", 0], startsAt: at }]), "football/nfl");
+    expect(game?.startsAt).toBe(at);
+    expect(parseScoreboard(scoreboard("pre", 0, 0), "football/nfl")[0]?.startsAt).toBeUndefined();
   });
 });

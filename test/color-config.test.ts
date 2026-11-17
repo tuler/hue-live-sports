@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { hexToXy, lampColors, WHITE } from "../src/color.ts";
-import { effectFor, parseConfig } from "../src/config.ts";
+import { effectFor, parseConfig, parseSettings } from "../src/config.ts";
 
 describe("color", () => {
   it("converts sRGB primaries to their xy chromaticities", () => {
@@ -28,11 +28,14 @@ describe("config", () => {
   const base = { league: "nfl", group: "Living Room" };
   it("applies defaults", () => {
     const c = parseConfig(base);
-    expect(c).toMatchObject({ teams: [], pollSeconds: 10, delaySeconds: 0, effectMode: "signal" });
+    expect(c).toMatchObject({ league: "nfl", pollSeconds: 10, delaySeconds: 0, effectMode: "signal" });
     expect(effectFor(c, ["touchdown", "score"])).toMatchObject({ seconds: 10, signal: "alternating" });
     expect(effectFor(c, ["extra_point", "score"])).toBeUndefined();
-    expect(effectFor(c, ["game_start"])).toBeUndefined();
+    expect(effectFor(c, ["game_start"])).toMatchObject({ seconds: 5, signal: "alternating" });
     expect(effectFor(c, ["win"])).toMatchObject({ seconds: 10, signal: "alternating" });
+  });
+  it("keeps settings to lasting choices: no league or game", () => {
+    expect(Object.keys(parseSettings({ group: "Den", league: "nfl" })).sort()).toEqual(["delaySeconds", "effectMode", "effects", "group"]);
   });
   it("lets a specific disabled effect win over the fallback", () => {
     expect(effectFor(parseConfig(base), ["basket", "score"])).toBeUndefined();
@@ -47,8 +50,8 @@ describe("config", () => {
     expect(() => parseConfig({ ...base, effects: { loss: {} } })).toThrow(/Unknown effect "loss"\. Known/);
   });
   it("rejects invalid values", () => {
-    expect(() => parseConfig({ ...base, teams: "NYG" })).toThrow(/teams/);
-    expect(() => parseConfig({ ...base, teams: ["NYG", ""] })).toThrow(/teams/);
+    expect(() => parseConfig({ group: "Den" })).toThrow(/league/);
+    expect(() => parseConfig({ ...base, league: "../etc" })).toThrow(/Unknown league/);
     expect(() => parseConfig({ ...base, group: "" })).toThrow(/group/);
     expect(() => parseConfig({ ...base, pollSeconds: 1 })).toThrow(/pollSeconds/);
     expect(() => parseConfig({ ...base, effectMode: "disco" })).toThrow(/effectMode/);

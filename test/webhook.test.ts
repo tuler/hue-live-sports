@@ -7,7 +7,7 @@ import type { HueBridge, LightGroup } from "../src/hue.ts";
 import { run } from "../src/runner.ts";
 import { createWebhookHandler, genericAdapter, MAX_CLOCK_SKEW_SECONDS, signGeneric } from "../src/sources/webhook.ts";
 import { Tracker } from "../src/tracker.ts";
-import { board } from "./fixture.ts";
+import { board, following } from "./fixture.ts";
 
 const SECRET = "s3cret";
 const URL_ = "http://localhost/hook";
@@ -92,7 +92,7 @@ async function service(overrides: object, during: (url: string, calls: unknown[]
   let i = 0;
   const logs = spyOn(console, "log").mockImplementation(() => {});
   try {
-    await run(config, { bridge, group }, stop.signal, {
+    await run(config, following("NYG", "DAL"), { bridge, group }, stop.signal, {
       webhookSecret: SECRET,
       fetchBoard: async () => parseScoreboard(boards[Math.min(i++, boards.length - 1)] ?? board([]), "football/nfl"),
       onListening: (url) => void during(url, calls).finally(() => stop.abort()),
@@ -136,7 +136,7 @@ describe("service with a webhook receiver", () => {
   it("refuses to start a receiver without a secret", async () => {
     const config = parseConfig({ league: "nfl", group: "Den", webhook: {} });
     const logs = spyOn(console, "log").mockImplementation(() => {});
-    await expect(run(config, undefined, new AbortController().signal)).rejects.toThrow(/WEBHOOK_SECRET/);
+    await expect(run(config, following("NYG", "DAL"), undefined, new AbortController().signal)).rejects.toThrow(/WEBHOOK_SECRET/);
     logs.mockRestore();
   });
 });
