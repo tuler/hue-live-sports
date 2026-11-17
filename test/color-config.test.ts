@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
-import { hexToXy, lampColors, WHITE } from "../src/color.js";
-import { effectFor, parseConfig } from "../src/config.js";
+import { describe, expect, it } from "bun:test";
+import { hexToXy, lampColors, WHITE } from "../src/color.ts";
+import { effectFor, parseConfig } from "../src/config.ts";
 
 describe("color", () => {
   it("converts sRGB primaries to their xy chromaticities", () => {

@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
-import { parseScoreboard } from "../src/espn.js";
-import { classifyScore, detectEvents, eventKeys } from "../src/events.js";
-import { scoreboard } from "./fixture.js";
+import { describe, expect, it } from "bun:test";
+import { parseScoreboard } from "../src/espn.ts";
+import { classifyScore, detectEvents, eventKeys } from "../src/events.ts";
+import { scoreboard } from "./fixture.ts";
 
 const snap = (state: "pre" | "in" | "post", home: number, away: number, league = "football/nfl") =>
   parseScoreboard(scoreboard(state, home, away), league)[0]!;

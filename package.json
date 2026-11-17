@@ -4,33 +4,22 @@
   "description": "Flash Philips Hue lights on live sports events (touchdowns, goals, wins)",
   "type": "module",
   "bin": {
-    "hue-live-sports": "dist/cli.js"
+    "hue-live-sports": "src/cli.ts"
   },
   "files": [
-    "dist"
+    "src"
   ],
   "engines": {
-    "node": ">=22"
+    "bun": ">=1.2"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "dev": "tsx src/cli.ts",
-    "start": "node dist/cli.js",
+    "start": "bun src/cli.ts",
+    "compile": "bun build src/cli.ts --compile --outfile dist/hue-live-sports",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
-  },
-  "dependencies": {
-    "undici": "^8.12.4"
+    "test": "bun test"
   },
   "devDependencies": {
-    "@types/node": "^22.20.5",
-    "tsx": "^4.23.15",
-    "typescript": "^7.0.2",
-    "vitest": "^5.1.0"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
+    "@types/bun": "^1.4.4",
+    "typescript": "^7.0.2"
   }
 }
