@@ -8,7 +8,7 @@
  *   GET  /auth/start               sign in with Hue (OAuth); the bridge id becomes the user id
  *   GET  /auth/callback            Hue's redirect back; sets the session cookie
  *   POST /auth/signout
- *   POST /webhook/<league>         signed score updates (the ESPN feeder posts here too)
+ *   POST /webhook/<league>         signed score updates (the ESPN feeder and the Polymarket relay post here too)
  *
  * Signed in (session cookie)
  *   GET  /api/me                   settings, the followed game, defaults and the league list
@@ -23,7 +23,7 @@
  *
  * Admin (Authorization: Bearer $ADMIN_TOKEN)
  *   GET|PUT|DELETE /users/<id>, PUT|DELETE /users/<id>/game, PUT /users/<id>/tokens,
- *   POST /users/<id>/test, GET /leagues/<league>
+ *   POST /users/<id>/test, GET /leagues/<league>, GET /polymarket
  */
 import { DEFAULT_EFFECTS } from "../config.ts";
 import { fetchScoreboard, LEAGUE_NAMES, leagueLogos, LEAGUES, resolveLeague, sportOf, type GameSnapshot, type TeamSide } from "../espn.ts";
@@ -35,6 +35,7 @@ import { gameKey } from "../tracker.ts";
 import type { Env } from "./env.ts";
 import { WEBHOOK_PATH } from "./games.ts";
 import { leagueCounter } from "./league-counts.ts";
+import { POLYMARKET_RELAY } from "./polymarket.ts";
 import {
   checkState,
   clearCookie,
@@ -47,6 +48,7 @@ import {
 
 export { Feeder } from "./feeder.ts";
 export { Games } from "./games.ts";
+export { Polymarket } from "./polymarket.ts";
 export { User } from "./user.ts";
 
 const json = (body: unknown, status = 200) => Response.json(body, { status });
@@ -307,6 +309,11 @@ async function route(req: Request, env: Env): Promise<Response> {
     const name = league(leaguePath[1]!);
     const [games, feeder] = await Promise.all([env.GAMES.getByName(name).status(), env.FEEDER.getByName(name).status()]);
     return json({ league: name, ...games, feeder });
+  }
+
+  if (path === "/polymarket" && req.method === "GET") {
+    requireAdmin(req, env);
+    return json(await env.POLYMARKET.getByName(POLYMARKET_RELAY).status());
   }
 
   return fail(404, "not found");

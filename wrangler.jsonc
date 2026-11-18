@@ -11,17 +11,21 @@
   "assets": {
     "directory": "./dist/web",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/auth/*", "/webhook/*", "/users/*", "/leagues/*"]
+    "run_worker_first": ["/api/*", "/auth/*", "/webhook/*", "/users/*", "/leagues/*", "/polymarket"]
   },
   "preview_urls": false,
   "durable_objects": {
     "bindings": [
       { "name": "GAMES", "class_name": "Games" },
       { "name": "FEEDER", "class_name": "Feeder" },
-      { "name": "USER", "class_name": "User" }
+      { "name": "USER", "class_name": "User" },
+      { "name": "POLYMARKET", "class_name": "Polymarket" }
     ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Games", "Feeder", "User"] }]
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["Games", "Feeder", "User"] },
+    { "tag": "v2", "new_sqlite_classes": ["Polymarket"] }
+  ]
   // Secrets (`wrangler secret put`, or .dev.vars locally):
   // WEBHOOK_SECRET, HUE_CLIENT_ID, HUE_CLIENT_SECRET, ADMIN_TOKEN
 }

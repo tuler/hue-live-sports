@@ -1,5 +1,6 @@
 import type { Feeder } from "./feeder.ts";
 import type { Games } from "./games.ts";
+import type { Polymarket } from "./polymarket.ts";
 import type { User } from "./user.ts";
 
 export interface Env {
@@ -7,6 +8,8 @@ export interface Env {
   GAMES: DurableObjectNamespace<Games>;
   /** One per league: polls ESPN on an alarm and posts to that league's receiver. */
   FEEDER: DurableObjectNamespace<Feeder>;
+  /** One in all ("relay"): Polymarket's sports WebSocket, posting followed games to their league's receiver. */
+  POLYMARKET: DurableObjectNamespace<Polymarket>;
   /** One per user: settings, Hue tokens, and the queue of effects to play. */
   USER: DurableObjectNamespace<User>;
   /** Signs webhook deliveries, the feeder's included. */

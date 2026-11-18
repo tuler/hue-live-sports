@@ -18,6 +18,7 @@ import { HueRemoteAuth, remoteTransport, type RemoteTokens, type TokenStore } fr
 import { findNflTeam, NFL_LEAGUE } from "../nfl.ts";
 import { isLate, planEffects, type PlannedEffect } from "../plan.ts";
 import type { Env } from "./env.ts";
+import { POLYMARKET_RELAY } from "./polymarket.ts";
 
 interface Profile {
   id: string;
@@ -82,8 +83,8 @@ export class User extends DurableObject<Env> {
 
   /**
    * Follows `game` instead of whatever came before: subscribes to it in its
-   * league and starts that league's feeder. Effects still queued for the old
-   * game are dropped.
+   * league, starts that league's feeder, and has the Polymarket relay watch
+   * it. Effects still queued for the old game are dropped.
    */
   async follow(game: FollowedGame): Promise<FollowedGame> {
     const profile = await this.profile();
@@ -93,6 +94,9 @@ export class User extends DurableObject<Env> {
     await this.ctx.storage.put<Profile>("profile", { ...profile, game });
     await this.env.GAMES.getByName(league).subscribe(profile.id, game.key, game.until);
     await this.env.FEEDER.getByName(league).start(league);
+    // Polymarket brings scores sooner where it covers the league; ESPN still works without it.
+    const relay = { league, key: game.key, home: game.home.abbreviation, away: game.away.abbreviation, until: game.until };
+    await this.env.POLYMARKET.getByName(POLYMARKET_RELAY).watch(relay).catch((err) => console.error("Polymarket watch failed:", err));
     return game;
   }
 
