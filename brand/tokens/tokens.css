@@ -1,0 +1,16 @@
+:root {
+  --sl-ground: #0C1022;
+  --sl-bezel: #2E3558;
+  --sl-paper: #F6F4EF;
+  --sl-ink: #0C1022;
+  --sl-glow-warm: #FF9A3D;
+  --sl-glow-mid: #FF3D9A;
+  --sl-glow-cool: #3D6BFF;
+  --sl-text-muted-on-dark: #A8AEC6;
+  --sl-text-muted-on-light: #4D5268;
+  --sl-font: 'Outfit', system-ui, sans-serif;
+  /* The screen fill: warm from the left, cool from the right, mid where they meet. */
+  --sl-screen-fill: radial-gradient(90% 130% at 0% 50%, var(--sl-glow-warm) 0%, var(--sl-glow-warm) 18%, transparent 75%),
+    radial-gradient(90% 130% at 100% 50%, var(--sl-glow-cool) 0%, var(--sl-glow-cool) 18%, transparent 75%),
+    var(--sl-glow-mid);
+}

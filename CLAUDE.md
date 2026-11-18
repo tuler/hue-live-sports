@@ -35,6 +35,7 @@ Data flows one way: sources -> tracker -> events -> dispatcher -> bridge.
 | `src/worker/` | Cloudflare Worker: `Games` (shared tracker + receiver + who follows which game, per league), `Feeder` (ESPN alarm, per league), `User` (settings, followed game, Hue tokens, delayed effect queue) |
 | `src/worker/index.ts` | Routes: settings page, Hue sign-in, session `/api`, admin routes, webhook |
 | `web/` | The settings page: React + Mantine, built by Vite to `dist/web` and served as Worker static assets. Game picker and room first; effects and flash mode live under "Advanced" |
+| `brand/` | Logo, icons, colour and font tokens, icon licences and the credit line (`CREDITS.md`). The source for the logo and every icon |
 | `web/src/components/` | One file per component, each with a `.stories.tsx`. Stories get a fake `/api` from `.storybook/preview.tsx`; a story overrides routes with `parameters.api` |
 | `src/worker/session.ts` | Signed session and OAuth-state cookies |
 | `src/hue.ts` | Bridge client over a `HueTransport`: pairing, rooms/zones, `signal` (bridge-run flash) and `pulse` (manual flash + restore) |
@@ -64,7 +65,8 @@ Data flows one way: sources -> tracker -> events -> dispatcher -> bridge.
 - **Score sources feed the receiver; they don't touch the tracker.** In the Worker even ESPN polling arrives as a signed webhook delivery, with `source: "espn"` and `complete: true` (the whole board).
 - **`hue.ts` and `hue-remote.ts` must stay Worker-safe** (only `fetch` and Web globals). Bun and Node calls go in `hue-local.ts` or `token-file.ts`.
 - **Remote refresh tokens are single use.** `HueRemoteAuth.refresh` shares one in-flight refresh between callers; a Worker version needs the same guarantee across requests (one Durable Object per user).
-- **No Hue branding in the logo or graphics.** Hue's developer terms (8(a)(xi)) allow "for Philips Hue" and "works with Philips Hue" in text, never Hue's wordmark, gradient or bulb artwork in a logo. `Logo.tsx` is a placeholder until the real logo exists.
+- **No Hue branding in the logo or graphics.** Hue's developer terms (8(a)(xi)) allow "for Philips Hue" and "works with Philips Hue" in text, never Hue's wordmark, gradient or bulb artwork in a logo. The logo, icons, colours and font live in `brand/` (see its README); `Logo.tsx` shows its lockups and `web/public` holds copies of its web icons.
+- **The football, soccer ball and basketball in the mark are CC BY 3.0.** Their credit line in `Footer.tsx` must stay visible on the site, and go in the iOS app's acknowledgements.
 - **The bridge certificate is self-signed for the bridge id.** Verification is off unless `HUE_CA_FILE` is set; keep that scoped to bridge requests.
 
 ## Verified against the real world

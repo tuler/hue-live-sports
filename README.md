@@ -129,7 +129,7 @@ The hosted version runs at [scorelights.app](https://scorelights.app), as the Wo
 - **Feeder** (one per league) polls ESPN on an alarm, every 10 s while a game is live, and posts the board to that receiver, signed, like any other score source. It stops when nobody in the league follows a game.
 - **User** (one per bridge) keeps that bridge's settings, the game it follows and its Hue Remote API tokens. It holds each effect for the TV delay, plays it from an alarm, and stops following when the final arrives (or 12 hours after kickoff).
 
-The page is a React + [Mantine](https://mantine.dev) app in [`web/`](web), built by Vite and served by the Worker as static assets. The main screen is kept simple (the game, the room, TV delay, test flash); effects and the flash mode sit under **Advanced**.
+The logo, icons and brand colours are in [`brand/`](brand), with the icon licences and the credit line the site has to show. The page is a React + [Mantine](https://mantine.dev) app in [`web/`](web), built by Vite and served by the Worker as static assets. The main screen is kept simple (the game, the room, TV delay, test flash); effects and the flash mode sit under **Advanced**.
 
 Page views are counted with [Cloudflare Web Analytics](https://www.cloudflare.com/web-analytics/), which sets no cookies. Production builds include its beacon when `CF_BEACON_TOKEN` (the site token from the Web Analytics dashboard) is set in the shell or `.env`; without it, and under `web:dev` and Storybook, there is no beacon.
 

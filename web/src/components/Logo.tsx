@@ -1,31 +1,27 @@
+import { Image } from "@mantine/core";
+import horizontalOnDark from "../../../brand/logo/lockup-horizontal-on-dark.svg";
+import horizontalOnLight from "../../../brand/logo/lockup-horizontal-on-light.svg";
+import stackedOnDark from "../../../brand/logo/lockup-stacked-on-dark.svg";
+import stackedOnLight from "../../../brand/logo/lockup-stacked-on-light.svg";
+
+const LOCKUPS = {
+  /** Small TV mark beside the name: the header. */
+  horizontal: { light: horizontalOnLight, dark: horizontalOnDark, label: "Scorelights" },
+  /** TV mark above the name, "for Philips Hue" underneath: the sign-in screen. */
+  stacked: { light: stackedOnLight, dark: stackedOnDark, label: "Scorelights for Philips Hue" },
+};
+
 /**
- * The app's mark: a placeholder until the real Scorelights logo is drawn. The favicon's
- * dot beside the wordmark, "Score" heavy and "lights" regular. No Hue artwork: Hue's
- * developer terms bar its branding from any logo.
+ * The Scorelights logo from `brand/logo`, in the version for the current colour scheme.
+ * `size` is its height in pixels.
  */
-export function Logo({ size = 28 }: { size?: number }) {
-  const em = Math.round(size * 0.8);
+export function Logo({ variant = "horizontal", size = 36 }: { variant?: keyof typeof LOCKUPS; size?: number }) {
+  const lockup = LOCKUPS[variant];
+  const props = { h: size, w: "auto", fit: "contain" as const, style: { flexShrink: 0 } };
   return (
-    <span
-      role="img"
-      aria-label="Scorelights"
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: Math.round(em * 0.3),
-        fontSize: em,
-        lineHeight: 1,
-        letterSpacing: "-0.02em",
-        whiteSpace: "nowrap",
-      }}
-    >
-      <svg viewBox="0 0 64 64" width={em} height={em} aria-hidden="true" style={{ display: "block", flexShrink: 0 }}>
-        <circle cx="32" cy="32" r="26" fill="#f76707" />
-      </svg>
-      <span>
-        <span style={{ fontWeight: 800 }}>Score</span>
-        <span style={{ fontWeight: 400 }}>lights</span>
-      </span>
-    </span>
+    <>
+      <Image src={lockup.light} alt={lockup.label} darkHidden {...props} />
+      <Image src={lockup.dark} alt={lockup.label} lightHidden {...props} />
+    </>
   );
 }
