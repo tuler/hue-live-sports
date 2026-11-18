@@ -6,7 +6,7 @@ export function SignedOut() {
   return (
     <Paper withBorder radius="lg" p={{ base: "lg", sm: 48 }} ta="center">
       <Center mb="lg">
-        <Logo variant="stacked" size={150} />
+        <Logo variant="stacked" size={200} />
       </Center>
       <Title order={2} mb="xs">
         Make your living room part of the game

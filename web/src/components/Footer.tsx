@@ -15,19 +15,15 @@ export function Footer() {
         Scores are unofficial and can arrive before or after your TV picture.
       </Text>
       <Text size="xs" c="dimmed">
-        Football, soccer ball and basketball icons by{" "}
-        <Anchor href="https://delapouite.com" inherit c="dimmed" underline="always">
+        Football, soccer and basketball icons by{" "}
+        <Anchor href="https://game-icons.net" inherit c="dimmed" underline="always">
           Delapouite
         </Anchor>
-        , from{" "}
-        <Anchor href="https://game-icons.net" inherit c="dimmed" underline="always">
-          game-icons.net
-        </Anchor>
-        , licensed under{" "}
+        ,{" "}
         <Anchor href="https://creativecommons.org/licenses/by/3.0/" inherit c="dimmed" underline="always">
           CC BY 3.0
         </Anchor>
-        . Colours changed.
+        .
       </Text>
     </Stack>
   );
