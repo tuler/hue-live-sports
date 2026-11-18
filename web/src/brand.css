@@ -28,3 +28,9 @@
   background: var(--sl-glow);
   filter: brightness(1.06) saturate(1.05);
 }
+
+/* Mantine rings focus in the primary colour; the bright orange is too faint for that on white. */
+.mantine-focus-auto:focus-visible,
+.mantine-focus-always:focus {
+  outline-color: var(--sl-accent-text);
+}

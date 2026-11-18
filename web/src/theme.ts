@@ -1,20 +1,20 @@
 import { Card, type CSSVariablesResolver, createTheme, type MantineColorsTuple, Paper } from "@mantine/core";
 
 /**
- * The brand's pink (`--sl-glow-mid`, #FF3D9A) at index 5, tinted towards white above it and
- * shaded towards the brand's ink below.
+ * The logo's orange (`--sl-glow-warm`, #FF9A3D) at index 5, tinted towards white above it and
+ * darkened to a saturated burnt orange below (mixing in the ink would turn it brown).
  */
-const glow: MantineColorsTuple = [
-  "#FFEFF7",
-  "#FFDCED",
-  "#FFBDDD",
-  "#FF9ACA",
-  "#FF6CB2",
-  "#FF3D9A",
-  "#DD3789",
-  "#BD317A",
-  "#9E2B6A",
-  "#81265C",
+const brand: MantineColorsTuple = [
+  "#FFF7EF",
+  "#FFEDDC",
+  "#FFDDBD",
+  "#FFCA9A",
+  "#FFB26C",
+  "#FF9A3D",
+  "#F97510",
+  "#D65805",
+  "#AE4104",
+  "#8B3104",
 ];
 
 /**
@@ -38,10 +38,10 @@ const FONT = 'Outfit, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 
 /** Shared by the app and Storybook. Load `brand.css` alongside it for the font and the glow. */
 export const theme = createTheme({
-  colors: { glow, dark },
-  primaryColor: "glow",
-  // Filled buttons are the bright brand pink with dark text (5.7:1), like the dark ball on the
-  // logo's screen; white on that pink would be too faint.
+  colors: { brand, dark },
+  primaryColor: "brand",
+  // Filled buttons are the bright logo orange with dark text (8.9:1), like the dark ball on the
+  // logo's screen; white on that orange would be far too faint (2.1:1).
   primaryShade: 5,
   autoContrast: true,
   luminanceThreshold: 0.25,
@@ -58,17 +58,17 @@ export const theme = createTheme({
 
 /**
  * Light pages sit on the brand's paper with white cards; dark pages on its night blue.
- * `--sl-accent-text` is the brand pink dark or light enough to read as small text.
+ * `--sl-accent-text` is the brand orange dark or light enough to read as small text, and to ring focus.
  */
 export const cssVariablesResolver: CSSVariablesResolver = () => ({
   variables: {},
   light: {
     "--mantine-color-body": "#F6F4EF",
     "--sl-surface": "#FFFFFF",
-    "--sl-accent-text": glow[8],
+    "--sl-accent-text": brand[8],
   },
   dark: {
     "--sl-surface": dark[6],
-    "--sl-accent-text": glow[4],
+    "--sl-accent-text": brand[4],
   },
 });
