@@ -1,0 +1,30 @@
+/* The Scorelights brand on the page: the Outfit typeface (bundled, since the CSP allows no font
+   hosts) and the colours of brand/tokens/tokens.css. The Mantine theme in theme.ts builds on these. */
+@import "@fontsource/outfit/400.css";
+@import "@fontsource/outfit/500.css";
+@import "@fontsource/outfit/600.css";
+@import "@fontsource/outfit/700.css";
+
+:root {
+  --sl-ground: #0c1022;
+  --sl-bezel: #2e3558;
+  --sl-paper: #f6f4ef;
+  --sl-ink: #0c1022;
+  --sl-glow-warm: #ff9a3d;
+  --sl-glow-mid: #ff3d9a;
+  --sl-glow-cool: #3d6bff;
+  /* The logo's screen as a strip: warm, mid, cool. */
+  --sl-glow: linear-gradient(100deg, var(--sl-glow-warm) 0%, var(--sl-glow-mid) 50%, var(--sl-glow-cool) 100%);
+}
+
+/* The one call to action on a screen, lit like the TV in the logo: ink on the glow. */
+.sl-glow-button {
+  background: var(--sl-glow);
+  color: var(--sl-ink);
+  border: 0;
+}
+
+.sl-glow-button:hover {
+  background: var(--sl-glow);
+  filter: brightness(1.06) saturate(1.05);
+}

@@ -41,7 +41,7 @@ export function GameCard({ game, following = false, action, onSelect, selecting 
   const detail = "detail" in game ? game.detail : "";
   const status = live ? detail : game.startsAt ? startTime(game.startsAt) : detail;
   const hint = onSelect && (
-    <Group gap={2} c="var(--mantine-primary-color-filled)" wrap="nowrap" style={{ flexShrink: 0 }}>
+    <Group gap={2} c="var(--sl-accent-text)" wrap="nowrap" style={{ flexShrink: 0 }}>
       {selecting ? (
         <Loader size={14} />
       ) : (

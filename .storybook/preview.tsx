@@ -1,10 +1,11 @@
 import "@mantine/core/styles.css";
 import "@mantine/notifications/styles.css";
+import "../web/src/brand.css";
 import { MantineProvider } from "@mantine/core";
 import { Notifications } from "@mantine/notifications";
 import type { Preview } from "@storybook/react-vite";
 import { DEFAULT_ROUTES, fakeFetch, type FakeRoutes } from "../web/src/stories/fakeApi.ts";
-import { theme } from "../web/src/theme.ts";
+import { cssVariablesResolver, theme } from "../web/src/theme.ts";
 
 const preview: Preview = {
   globalTypes: {
@@ -37,7 +38,7 @@ const preview: Preview = {
   },
   decorators: [
     (Story, { globals }) => (
-      <MantineProvider theme={theme} forceColorScheme={globals.scheme === "dark" ? "dark" : "light"}>
+      <MantineProvider theme={theme} cssVariablesResolver={cssVariablesResolver} forceColorScheme={globals.scheme === "dark" ? "dark" : "light"}>
         <Notifications position="top-center" />
         <Story />
       </MantineProvider>
