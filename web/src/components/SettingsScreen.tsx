@@ -127,7 +127,8 @@ export function SettingsScreen({ me }: { me: Me }) {
 
   return (
     <Stack gap="md">
-      {!me.settings && (
+      {/* `saved`, not `me.settings`: `me` is the page's first load and does not change when settings are saved. */}
+      {!saved && (
         <Alert color="orange" variant="light" title="Almost there">
           Check the room to flash, then pick the game you're watching.
         </Alert>
