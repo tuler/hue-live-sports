@@ -40,6 +40,19 @@ Copy the contents of `icons/` to the web root (the manifest assumes root paths) 
 - `app-icon-1024.png`: iOS App Store icon, square with no transparency; iOS rounds the corners itself.
 - `app-icon.svg`, `app-icon-maskable.svg`: sources for the PNGs.
 
+## Link-preview image
+
+`social/share-card.html` lays out the 1200×630 image that link previews show (`web/public/og-image.png`, referenced by the `og:image` tag in `web/index.html`). It uses the real Outfit files from `node_modules`, so render it with headless Chrome after `bun install`:
+
+```sh
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --hide-scrollbars \
+  --force-device-scale-factor=1 --window-size=1200,630 --virtual-time-budget=3000 \
+  --allow-file-access-from-files --screenshot=web/public/og-image.png \
+  "file://$PWD/brand/social/share-card.html"
+```
+
+Social sites cache previews, so a changed image may need a new file name to show up.
+
 ## Colors and type
 
 `tokens/tokens.css` defines the colors as `--sl-*` custom properties, including `--sl-screen-fill`, the three-color fill used on the screen. On a score, swap `--sl-glow-warm` and `--sl-glow-cool` for the two teams' colors.
