@@ -10,7 +10,7 @@ bun run typecheck      # tsc three times: Bun types (CLI), Workers types (src/wo
 bun test               # all tests; Hue client tests need `openssl`, skipped without it
 bun start <command>    # discover | pair | remote-auth | groups | games | teams | test | emit | run (bridge commands take --remote)
 bun run compile        # standalone binary at dist/scorelights
-bun run worker:dev     # the Worker locally (needs .dev.vars); builds web/ first. worker:deploy publishes both
+bun run worker:dev     # the Worker locally (needs .dev.vars); builds web/ first. worker:deploy publishes both (pushes to main do this automatically)
 bun run web:dev        # the settings page with hot reload, proxying /api and /auth to worker:dev on :8787
 bun run storybook      # every UI component and screen on :6006, against a fake /api (web/src/stories/fakeApi.ts)
 ```
@@ -95,4 +95,5 @@ Open questions: which licensed score feed to use, Hue Remote API quotas for per-
 ## Workflow
 
 - Work directly on `main`; no pull requests for now.
+- **Pushing to `main` deploys production.** Cloudflare Workers Builds is connected to `tuler/scorelights`: each push runs `bun run typecheck && bun test`, then `bunx wrangler deploy` to scorelights.app. Only push what is ready to go live. `bun run worker:deploy` still works for a one-off deploy, but the next push replaces it. Runtime secrets live on the Worker, not in the build.
 - Secrets live in `.env` (`HUE_APP_KEY`, `WEBHOOK_SECRET`); `.env` and `config.json` are gitignored. `.env` also holds `CF_BEACON_TOKEN`, the Cloudflare Web Analytics site token that `web/vite.config.ts` puts into production builds of the page (not a secret: it ships in the HTML).
